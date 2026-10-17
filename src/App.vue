@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import {
   DIFFICULTIES,
   hasDifficulty,
@@ -104,7 +105,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <el-config-provider>
+  <el-config-provider :locale="zhCn">
     <main class="page-shell">
       <header class="hero">
         <div class="hero-orbit hero-orbit-one"></div>

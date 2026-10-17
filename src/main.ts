@@ -1,14 +1,14 @@
-import {createApp} from 'vue'
+import { createApp } from 'vue'
 import {
-    ElAlert,
-    ElButton,
-    ElConfigProvider,
-    ElEmpty,
-    ElInput,
-    ElOption,
-    ElPagination,
-    ElSelect,
-    ElTag,
+  ElAlert,
+  ElButton,
+  ElConfigProvider,
+  ElEmpty,
+  ElInput,
+  ElOption,
+  ElPagination,
+  ElSelect,
+  ElTag,
 } from 'element-plus'
 import 'element-plus/theme-chalk/base.css'
 import 'element-plus/theme-chalk/el-alert.css'
