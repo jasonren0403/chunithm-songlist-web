@@ -167,35 +167,32 @@ onUnmounted(() => {
 <template>
   <el-config-provider :locale="zhCn">
     <main class="page-shell">
-      <header class="hero">
-        <div class="hero-orbit hero-orbit-one"></div>
-        <div class="hero-orbit hero-orbit-two"></div>
-        <div class="hero-content">
-          <div class="eyebrow"><span></span> MUSIC DATABASE · REGION TRACKER</div>
-          <div class="hero-heading">
-            <div>
-              <h1>CHUNITHM <span>SONG ATLAS</span></h1>
-              <p>穿梭区服之间，探索每一首节奏的坐标。</p>
-            </div>
-            <div class="hero-actions">
-              <el-button
-                class="theme-toggle"
-                plain
-                :aria-label="theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'"
-                :aria-pressed="theme === 'dark'"
-                @click="toggleTheme"
-              >
-                <el-icon><Sunny v-if="theme === 'dark'" /><Moon v-else /></el-icon>
-                {{ theme === 'dark' ? '亮色模式' : '暗色模式' }}
-              </el-button>
-              <div class="live-mark"><i></i> 官方曲库同步</div>
-            </div>
-          </div>
-          <div class="hero-foot">
-            <span>JPN / EXP 曲库对照</span>
-            <span class="hero-divider"></span>
-            <span>CHN 数据暂未接入</span>
-          </div>
+      <header class="site-header">
+        <div class="header-brand">
+          <span class="eyebrow"><span></span> MUSIC DATABASE</span>
+          <h1>CHUNITHM <span>SONG ATLAS</span></h1>
+        </div>
+        <el-input
+          v-model="keyword"
+          class="header-search"
+          clearable
+          placeholder="搜索曲名、曲师或读音"
+          aria-label="搜索曲名、曲师或读音"
+        >
+          <template #prefix><span class="search-icon">⌕</span></template>
+        </el-input>
+        <div class="header-actions">
+          <el-button
+            class="theme-toggle"
+            plain
+            :aria-label="theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'"
+            :aria-pressed="theme === 'dark'"
+            @click="toggleTheme"
+          >
+            <el-icon><Sunny v-if="theme === 'dark'" /><Moon v-else /></el-icon>
+            {{ theme === 'dark' ? '亮色模式' : '暗色模式' }}
+          </el-button>
+          <div class="live-mark"><i></i> 官方曲库同步</div>
         </div>
       </header>
 
@@ -212,15 +209,6 @@ onUnmounted(() => {
         </div>
 
         <section class="filter-panel" aria-label="曲目筛选">
-          <el-input
-            v-model="keyword"
-            class="search-field"
-            clearable
-            placeholder="搜索曲名、曲师或读音"
-            aria-label="搜索曲名、曲师或读音"
-          >
-            <template #prefix><span class="search-icon">⌕</span></template>
-          </el-input>
           <el-select v-model="category" clearable placeholder="全部分类" aria-label="分类筛选">
             <el-option v-for="item in categories" :key="item" :label="item" :value="item" />
           </el-select>
