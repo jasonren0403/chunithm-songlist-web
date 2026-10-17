@@ -1,3 +1,5 @@
+import { mergeRegionalSongs } from './catalog-merge.mjs'
+
 export const REGION_CONFIG = {
   JPN: {
     label: '日本区',
@@ -30,6 +32,12 @@ export type RegionSongs = Partial<Record<CoverRegion, RegionalSong>>
 export interface RegionalSong {
   image: string
   levels: DifficultyLevels
+  worldEnd: WorldEndChart[]
+}
+
+export interface WorldEndChart {
+  kanji: string
+  stars: string
 }
 
 export interface Song {
@@ -52,6 +60,8 @@ interface RawSong {
   lev_exp: string
   lev_mas: string
   lev_ult: string
+  we_kanji: string
+  we_star: string
 }
 
 const FEEDS: Record<Region, string> = {
@@ -81,6 +91,8 @@ function isRawSong(value: unknown): value is RawSong {
     'catname',
     'image',
     ...DIFFICULTIES.map(({ key }) => key),
+    'we_kanji',
+    'we_star',
   ].every((field) => typeof song[field] === 'string')
 }
 
@@ -94,6 +106,7 @@ function toRegionalSong(song: RawSong): RegionalSong {
       lev_mas: song.lev_mas,
       lev_ult: song.lev_ult,
     },
+    worldEnd: song.we_kanji || song.we_star ? [{ kanji: song.we_kanji, stars: song.we_star }] : [],
   }
 }
 
@@ -102,16 +115,29 @@ function parseCatalog(payload: unknown, region: Region): Song[] {
     throw new Error(`${REGION_CONFIG[region].label}曲库数据格式异常`)
   }
 
-  return payload.map((rawSong) => ({
-    key: normalizeTitle(rawSong.title),
-    title: rawSong.title,
-    reading: rawSong.reading,
-    artist: rawSong.artist,
-    category: rawSong.catname,
-    regions: {
-      [region]: toRegionalSong(rawSong),
-    },
-  }))
+  const songs = new Map<string, Song>()
+  for (const rawSong of payload) {
+    const key = normalizeTitle(rawSong.title)
+    const regionalSong = toRegionalSong(rawSong)
+    const existing = songs.get(key)
+    if (existing) {
+      existing.regions[region] = mergeRegionalSongs(existing.regions[region], regionalSong)
+      continue
+    }
+
+    songs.set(key, {
+      key,
+      title: rawSong.title,
+      reading: rawSong.reading,
+      artist: rawSong.artist,
+      category: rawSong.catname,
+      regions: {
+        [region]: regionalSong,
+      },
+    })
+  }
+
+  return [...songs.values()]
 }
 
 async function fetchCatalog(region: Region, signal: AbortSignal): Promise<Song[]> {
@@ -137,7 +163,10 @@ export async function loadCatalogs(signal: AbortSignal): Promise<Song[]> {
   for (const song of expSongs) {
     const existing = songs.get(song.key)
     if (existing) {
-      existing.regions.EXP = song.regions.EXP
+      const expSong = song.regions.EXP
+      if (expSong) {
+        existing.regions.EXP = mergeRegionalSongs(existing.regions.EXP, expSong)
+      }
     } else {
       songs.set(song.key, song)
     }
