@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, Moon, Sunny } from '@element-plus/icons-vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import {
   DIFFICULTIES,
@@ -14,7 +14,26 @@ import {
 } from './catalog'
 
 type RegionFilter = 'all' | 'JPN' | 'EXP' | 'both' | 'jpn-only' | 'exp-only' | 'CHN'
+type Theme = 'light' | 'dark'
 
+const themeStorageKey = 'chunithm-song-atlas-theme'
+const systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
+
+function loadSavedTheme(): Theme | null {
+  try {
+    const savedTheme = localStorage.getItem(themeStorageKey)
+    return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : null
+  } catch (error) {
+    console.error('Unable to read the saved theme preference.', error)
+    return null
+  }
+}
+
+const manualTheme = ref<Theme | null>(loadSavedTheme())
+const systemPrefersDark = ref(systemThemeQuery.matches)
+const theme = computed<Theme>(
+  () => manualTheme.value ?? (systemPrefersDark.value ? 'dark' : 'light'),
+)
 const songs = ref<Song[]>([])
 const isLoading = ref(true)
 const errorMessage = ref('')
@@ -29,6 +48,17 @@ const regions: Region[] = ['JPN', 'EXP']
 let requestController: AbortController | undefined
 
 const categories = computed(() => [...new Set(songs.value.map((song) => song.category))].sort())
+
+watch(
+  theme,
+  (value) => {
+    document.documentElement.classList.toggle('dark', value === 'dark')
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', value === 'dark' ? '#10111b' : '#f4f5fb')
+  },
+  { immediate: true },
+)
 
 const filteredSongs = computed(() => {
   const search = keyword.value.trim().toLocaleLowerCase()
@@ -93,6 +123,20 @@ function clearFilters(): void {
   regionFilter.value = 'all'
 }
 
+function toggleTheme(): void {
+  const nextTheme = theme.value === 'dark' ? 'light' : 'dark'
+  manualTheme.value = nextTheme
+  try {
+    localStorage.setItem(themeStorageKey, nextTheme)
+  } catch (error) {
+    console.error('Unable to save the theme preference.', error)
+  }
+}
+
+function handleSystemThemeChange(event: MediaQueryListEvent): void {
+  systemPrefersDark.value = event.matches
+}
+
 function handleCoverError(key: string, image?: string): void {
   if (!image) return
   const failed = new Set(failedCovers.value.get(key))
@@ -110,10 +154,12 @@ function hasStandardLevels(song: Song, region: Region): boolean {
 }
 
 onMounted(() => {
+  systemThemeQuery.addEventListener('change', handleSystemThemeChange)
   void refreshCatalog()
 })
 
 onUnmounted(() => {
+  systemThemeQuery.removeEventListener('change', handleSystemThemeChange)
   requestController?.abort()
 })
 </script>
@@ -131,7 +177,19 @@ onUnmounted(() => {
               <h1>CHUNITHM <span>SONG ATLAS</span></h1>
               <p>穿梭区服之间，探索每一首节奏的坐标。</p>
             </div>
-            <div class="live-mark"><i></i> 官方曲库同步</div>
+            <div class="hero-actions">
+              <el-button
+                class="theme-toggle"
+                plain
+                :aria-label="theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'"
+                :aria-pressed="theme === 'dark'"
+                @click="toggleTheme"
+              >
+                <el-icon><Sunny v-if="theme === 'dark'" /><Moon v-else /></el-icon>
+                {{ theme === 'dark' ? '亮色模式' : '暗色模式' }}
+              </el-button>
+              <div class="live-mark"><i></i> 官方曲库同步</div>
+            </div>
           </div>
           <div class="hero-foot">
             <span>JPN / EXP 曲库对照</span>
@@ -232,9 +290,6 @@ onUnmounted(() => {
                 <span>CHUNITHM</span>
                 <strong>{{ song.title.slice(0, 1) }}</strong>
               </div>
-              <span class="cover-number"
-                >NO. {{ String(songs.indexOf(song) + 1).padStart(4, '0') }}</span
-              >
             </div>
 
             <div class="song-content">
@@ -242,9 +297,13 @@ onUnmounted(() => {
                 <el-tag class="category-tag" effect="plain" size="small">{{
                   song.category
                 }}</el-tag>
-                <span class="song-id"
-                  >ATLAS / {{ String(songs.indexOf(song) + 1).padStart(4, '0') }}</span
-                >
+                <span class="song-id">
+                  <template v-for="region in regions" :key="region">
+                    <span v-if="song.regions[region]">
+                      {{ region }} {{ song.regions[region]?.id }}
+                    </span>
+                  </template>
+                </span>
               </div>
               <h3 :title="song.title">{{ song.title }}</h3>
               <p class="artist">{{ song.artist || '曲师信息暂无' }}</p>

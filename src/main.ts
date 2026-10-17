@@ -4,6 +4,7 @@ import {
   ElButton,
   ElConfigProvider,
   ElEmpty,
+  ElIcon,
   ElInput,
   ElOption,
   ElPagination,
@@ -21,6 +22,7 @@ import 'element-plus/theme-chalk/el-option.css'
 import 'element-plus/theme-chalk/el-pagination.css'
 import 'element-plus/theme-chalk/el-select.css'
 import 'element-plus/theme-chalk/el-tag.css'
+import 'element-plus/theme-chalk/dark/css-vars.css'
 import App from './App.vue'
 import './styles.css'
 
@@ -30,6 +32,7 @@ app.component('ElAlert', ElAlert)
 app.component('ElButton', ElButton)
 app.component('ElConfigProvider', ElConfigProvider)
 app.component('ElEmpty', ElEmpty)
+app.component('ElIcon', ElIcon)
 app.component('ElInput', ElInput)
 app.component('ElOption', ElOption)
 app.component('ElPagination', ElPagination)

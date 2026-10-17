@@ -1,6 +1,7 @@
 /**
  * @typedef {{ kanji: string, stars: string }} WorldEndChart
  * @typedef {{
+ *   id: string,
  *   image: string,
  *   levels: Record<'lev_bas' | 'lev_adv' | 'lev_exp' | 'lev_mas' | 'lev_ult', string>,
  *   worldEnd: WorldEndChart[]
@@ -26,6 +27,7 @@ export function mergeRegionalSongs(existing, incoming) {
   )
 
   return {
+    id: incoming.id || existing.id,
     image: incoming.image || existing.image,
     levels: {
       lev_bas: incoming.levels.lev_bas || existing.levels.lev_bas,

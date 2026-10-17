@@ -36,6 +36,7 @@ test('preserve an old cover if any song using it was removed', () => {
 test("merge repeated regional rows and retain unique WORLD'S END charts", () => {
   const merged = mergeRegionalSongs(
     {
+      id: '3057',
       image: 'cover.jpg',
       levels: {
         lev_bas: '',
@@ -47,6 +48,7 @@ test("merge repeated regional rows and retain unique WORLD'S END charts", () => 
       worldEnd: [{ kanji: '避', stars: '7' }],
     },
     {
+      id: '',
       image: '',
       levels: {
         lev_bas: '',
@@ -62,6 +64,7 @@ test("merge repeated regional rows and retain unique WORLD'S END charts", () => 
     },
   )
 
+  assert.equal(merged.id, '3057')
   assert.equal(merged.image, 'cover.jpg')
   assert.deepEqual(merged.worldEnd, [
     { kanji: '避', stars: '7' },

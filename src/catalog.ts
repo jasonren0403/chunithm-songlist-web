@@ -30,6 +30,7 @@ export type DifficultyLevels = Record<DifficultyKey, string>
 export type RegionSongs = Partial<Record<CoverRegion, RegionalSong>>
 
 export interface RegionalSong {
+  id: string
   image: string
   levels: DifficultyLevels
   worldEnd: WorldEndChart[]
@@ -50,6 +51,7 @@ export interface Song {
 }
 
 interface RawSong {
+  id: string
   title: string
   reading: string
   artist: string
@@ -85,6 +87,7 @@ function isRawSong(value: unknown): value is RawSong {
 
   const song = value as Record<string, unknown>
   return [
+    'id',
     'title',
     'reading',
     'artist',
@@ -98,6 +101,7 @@ function isRawSong(value: unknown): value is RawSong {
 
 function toRegionalSong(song: RawSong): RegionalSong {
   return {
+    id: song.id,
     image: song.image ? `${import.meta.env.BASE_URL}${song.image.replace(/^\//, '')}` : '',
     levels: {
       lev_bas: song.lev_bas,
