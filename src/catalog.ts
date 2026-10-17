@@ -5,7 +5,13 @@ export const REGION_CONFIG = {
   EXP: {
     label: '国际区',
   },
+  CHN: {
+    label: '中国区',
+  },
 } as const
+
+export const CATALOG_REGIONS = ['JPN', 'EXP'] as const
+export const COVER_REGIONS = ['JPN', 'EXP', 'CHN'] as const
 
 export const DIFFICULTIES = [
   { key: 'lev_bas', label: 'BASIC', shortLabel: 'BAS' },
@@ -15,10 +21,11 @@ export const DIFFICULTIES = [
   { key: 'lev_ult', label: 'ULTIMA', shortLabel: 'ULT' },
 ] as const
 
-export type Region = keyof typeof REGION_CONFIG
+export type Region = (typeof CATALOG_REGIONS)[number]
+export type CoverRegion = (typeof COVER_REGIONS)[number]
 export type DifficultyKey = (typeof DIFFICULTIES)[number]['key']
 export type DifficultyLevels = Record<DifficultyKey, string>
-export type RegionSongs = Partial<Record<Region, RegionalSong>>
+export type RegionSongs = Partial<Record<CoverRegion, RegionalSong>>
 
 export interface RegionalSong {
   image: string
@@ -54,6 +61,13 @@ const FEEDS: Record<Region, string> = {
 
 export function normalizeTitle(title: string): string {
   return title.normalize('NFKC').trim().replace(/\s+/g, '').toLocaleLowerCase()
+}
+
+export function getCoverCandidates(song: Song): string[] {
+  return COVER_REGIONS.flatMap((region) => {
+    const image = song.regions[region]?.image
+    return image ? [image] : []
+  })
 }
 
 function isRawSong(value: unknown): value is RawSong {

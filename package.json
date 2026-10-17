@@ -11,6 +11,7 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "sync:data": "node scripts/sync-catalogs.mjs",
+    "test": "node --test scripts/*.test.mjs",
     "type-check": "vue-tsc --build --force"
   },
   "dependencies": {

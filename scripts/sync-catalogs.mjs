@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { getSupersededCoverHashes, normalizeTitle } from './catalog-assets.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DATA_DIR = join(ROOT, 'public', 'data')
@@ -31,12 +32,12 @@ const REGIONS = {
   },
 }
 
-async function fetchWithRetry(url, label) {
+async function fetchWithRetry(url, label, options = {}) {
   let lastError
 
   for (let attempt = 1; attempt <= RETRIES; attempt += 1) {
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(30_000) })
+      const response = await fetch(url, { ...options, signal: AbortSignal.timeout(30_000) })
       if (response.ok) return response
       throw new HttpError(response.status)
     } catch (error) {
@@ -75,6 +76,27 @@ async function fetchCatalog(region) {
   return catalog
 }
 
+async function readPreviousCatalog(region) {
+  const catalogPath = join(DATA_DIR, region.outputFile)
+  if (!(await fileExists(catalogPath))) return []
+
+  const catalog = JSON.parse(await readFile(catalogPath, 'utf8'))
+  if (
+    !Array.isArray(catalog) ||
+    !catalog.every(
+      (song) =>
+        song &&
+        typeof song === 'object' &&
+        typeof song.title === 'string' &&
+        typeof song.image === 'string',
+    )
+  ) {
+    throw new Error(`${region.label} 现有本地曲库格式异常，无法安全检查封面变化`)
+  }
+
+  return catalog
+}
+
 async function fileExists(filePath) {
   try {
     return (await stat(filePath)).size > 0
@@ -89,17 +111,17 @@ async function fileExists(filePath) {
 async function downloadCover(region, image) {
   const targetDir = join(IMAGE_DIR, region.name)
   const targetPath = join(targetDir, image)
-  if (await fileExists(targetPath)) return false
 
   let response
   try {
     response = await fetchWithRetry(
       new URL(encodeURIComponent(image), region.imageBaseUrl),
       `${region.label} 封面 ${image}`,
+      { method: 'HEAD' },
     )
   } catch (error) {
     if (error instanceof Error && error.cause instanceof HttpError && error.cause.status === 404) {
-      return false
+      return 'missing'
     }
     throw error
   }
@@ -108,6 +130,18 @@ async function downloadCover(region, image) {
   if (!contentType.startsWith('image/')) {
     throw new Error(
       `${region.label} 封面 ${image} 返回了非图片内容（${contentType || '未知类型'}）`,
+    )
+  }
+  if (await fileExists(targetPath)) return 'cached'
+
+  response = await fetchWithRetry(
+    new URL(encodeURIComponent(image), region.imageBaseUrl),
+    `${region.label} 封面 ${image}`,
+  )
+  const imageContentType = response.headers.get('content-type') ?? ''
+  if (!imageContentType.startsWith('image/')) {
+    throw new Error(
+      `${region.label} 封面 ${image} 返回了非图片内容（${imageContentType || '未知类型'}）`,
     )
   }
 
@@ -120,11 +154,15 @@ async function downloadCover(region, image) {
   const temporaryPath = `${targetPath}.${process.pid}.${randomUUID()}.tmp`
   await writeFile(temporaryPath, imageBytes)
   await rename(temporaryPath, targetPath)
-  return true
+  return 'downloaded'
 }
 
 async function downloadCovers(region, catalog) {
-  const images = [...new Set(catalog.map(({ image }) => image))]
+  const songImages = catalog.map((song) => ({
+    key: normalizeTitle(song.title),
+    image: song.image,
+  }))
+  const images = [...new Set(songImages.map(({ image }) => image))]
   let nextIndex = 0
   let downloaded = 0
   const missingImages = new Set()
@@ -136,9 +174,10 @@ async function downloadCovers(region, catalog) {
       if (index >= images.length) return
 
       try {
-        if (await downloadCover(region, images[index])) {
+        const result = await downloadCover(region, images[index])
+        if (result === 'downloaded') {
           downloaded += 1
-        } else if (!(await fileExists(join(IMAGE_DIR, region.name, images[index])))) {
+        } else if (result === 'missing') {
           missingImages.add(images[index])
         }
         if ((index + 1) % 100 === 0 || index + 1 === images.length) {
@@ -156,7 +195,20 @@ async function downloadCovers(region, catalog) {
     song.image = missingImages.has(song.image) ? '' : `images/${region.name}/${song.image}`
   }
 
-  return { total: images.length, downloaded, missing: missingImages.size }
+  return {
+    total: images.length,
+    downloaded,
+    missing: missingImages.size,
+    songImages,
+  }
+}
+
+async function removeChangedCoverHashes(region, previousCatalog, currentSongImages) {
+  const oldHashes = getSupersededCoverHashes(region.name, previousCatalog, currentSongImages)
+  await Promise.all(
+    [...oldHashes].map((image) => rm(join(IMAGE_DIR, region.name, image), { force: true })),
+  )
+  return oldHashes.size
 }
 
 async function writeCatalog(region, catalog) {
@@ -168,9 +220,10 @@ async function writeCatalog(region, catalog) {
 
 async function syncRegion(region) {
   console.log(`${region.label}: 正在下载曲库…`)
+  const previousCatalog = await readPreviousCatalog(region)
   const catalog = await fetchCatalog(region)
   const coverStats = await downloadCovers(region, catalog)
-  return { region, catalog, coverStats }
+  return { region, catalog, previousCatalog, coverStats }
 }
 
 await mkdir(DATA_DIR, { recursive: true })
@@ -183,9 +236,14 @@ for (const { region, catalog } of results) {
   await writeCatalog(region, catalog)
 }
 
-for (const { region, catalog, coverStats } of results) {
+for (const { region, catalog, previousCatalog, coverStats } of results) {
+  coverStats.removed = await removeChangedCoverHashes(
+    region,
+    previousCatalog,
+    coverStats.songImages,
+  )
   console.log(
-    `${region.label}: ${catalog.length} 首曲目，新增 ${coverStats.downloaded} 张封面（共 ${coverStats.total} 张）${coverStats.missing ? `，${coverStats.missing} 张封面源站返回 404，将显示本地占位图` : ''}`,
+    `${region.label}: ${catalog.length} 首曲目，新增 ${coverStats.downloaded} 张封面（共 ${coverStats.total} 张）${coverStats.removed ? `，清理 ${coverStats.removed} 张封面 hash 已变化的旧图片` : ''}${coverStats.missing ? `，${coverStats.missing} 张封面源站返回 404，将显示其他区服封面或本地占位图` : ''}`,
   )
 }
 

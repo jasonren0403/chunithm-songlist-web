@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import {
   DIFFICULTIES,
+  getCoverCandidates,
   hasDifficulty,
   loadCatalogs,
   type DifficultyKey,
@@ -22,7 +23,7 @@ const difficulty = ref<DifficultyKey | ''>('')
 const regionFilter = ref<RegionFilter>('all')
 const currentPage = ref(1)
 const pageSize = ref(24)
-const failedCovers = ref(new Set<string>())
+const failedCovers = ref(new Map<string, Set<string>>())
 const regions: Region[] = ['JPN', 'EXP']
 let requestController: AbortController | undefined
 
@@ -91,8 +92,16 @@ function clearFilters(): void {
   regionFilter.value = 'all'
 }
 
-function handleCoverError(key: string): void {
-  failedCovers.value = new Set(failedCovers.value).add(key)
+function handleCoverError(key: string, image?: string): void {
+  if (!image) return
+  const failed = new Set(failedCovers.value.get(key))
+  failed.add(image)
+  failedCovers.value = new Map(failedCovers.value).set(key, failed)
+}
+
+function currentCover(song: Song): string | undefined {
+  const failed = failedCovers.value.get(song.key)
+  return getCoverCandidates(song).find((image) => !failed?.has(image))
 }
 
 onMounted(() => {
@@ -208,14 +217,11 @@ onUnmounted(() => {
           <article v-for="song in pagedSongs" :key="song.key" class="song-card">
             <div class="cover-wrap">
               <img
-                v-if="
-                  (song.regions.JPN?.image || song.regions.EXP?.image) &&
-                  !failedCovers.has(song.key)
-                "
-                :src="song.regions.JPN?.image || song.regions.EXP?.image"
+                v-if="currentCover(song)"
+                :src="currentCover(song)"
                 :alt="`${song.title} 封面`"
                 loading="lazy"
-                @error="handleCoverError(song.key)"
+                @error="handleCoverError(song.key, currentCover(song))"
               />
               <div v-else class="cover-placeholder">
                 <span>CHUNITHM</span>

@@ -10,7 +10,7 @@ pnpm run sync:data
 pnpm run dev
 ```
 
-`sync:data` 从官方曲库下载最新数据和全部可用封面，写入 `public/data/`、`public/images/jpn/` 和 `public/images/exp/`。新增曲目及其封面可通过再次运行此命令同步；已有封面会复用。若官方图片源返回 404，该曲目会显示页面内的本地占位图，并在同步结果中报告数量。
+`sync:data` 从官方曲库下载最新数据和全部可用封面，写入 `public/data/`、`public/images/jpn/` 和 `public/images/exp/`。新增曲目及其封面可通过再次运行此命令同步；已有封面会先检查源站并复用。与上次数据相比，只有同一首仍在曲库中的歌曲更换了封面 hash 时才清理旧封面；已下架歌曲的旧封面会保留。若封面源站返回 404，该区服不再引用该封面，页面按 JPN、EXP、CHN 顺序尝试其他区服封面；若均不可用，则显示本地占位图。
 
 - JPN: `https://chunithm.sega.jp/storage/json/music.json`
 - EXP: `https://chunithm.sega.com/assets/data/music.json`
@@ -23,6 +23,7 @@ pnpm run dev
 pnpm run type-check
 pnpm run lint
 pnpm run format:check
+pnpm run test
 pnpm run build
 pnpm run preview
 ```
