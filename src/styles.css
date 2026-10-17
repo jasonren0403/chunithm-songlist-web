@@ -328,13 +328,12 @@ input {
   font-size: 13px;
 }
 
-.loading-ring {
-  display: block;
-  width: 18px;
-  height: 18px;
-  border: 2px solid rgb(104 229 220 / 25%);
-  border-top-color: var(--cyan);
-  border-radius: 50%;
+.loading-icon {
+  color: var(--cyan);
+  font-size: 18px;
+}
+
+.loading-icon svg {
   animation: spin 0.8s linear infinite;
 }
 
@@ -520,9 +519,11 @@ input {
   min-height: 19px;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .region-code {
+  flex: 0 0 24px;
   width: 24px;
   color: #9c9db1;
   font-size: 8px;
@@ -575,6 +576,47 @@ input {
 
 .difficulty-lev_ult {
   background: rgb(255 102 157 / 10%);
+}
+
+.world-end-chip {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border: 1px solid rgb(255 101 149 / 28%);
+  border-radius: 3px;
+  background: linear-gradient(110deg, rgb(255 81 135 / 14%), rgb(150 68 155 / 13%));
+  color: #ffd8e7;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.world-end-chip b {
+  color: #ff9fbe;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.world-end-kanji {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  background: rgb(255 124 164 / 18%);
+  color: #fff0f5;
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.world-end-stars {
+  color: #ffc77c;
+  white-space: nowrap;
 }
 
 .no-levels {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import {
   DIFFICULTIES,
@@ -104,6 +105,10 @@ function currentCover(song: Song): string | undefined {
   return getCoverCandidates(song).find((image) => !failed?.has(image))
 }
 
+function hasStandardLevels(song: Song, region: Region): boolean {
+  return Object.values(song.regions[region]?.levels ?? {}).some(Boolean)
+}
+
 onMounted(() => {
   void refreshCatalog()
 })
@@ -202,7 +207,7 @@ onUnmounted(() => {
         </el-alert>
 
         <div v-if="isLoading" class="loading-state" role="status">
-          <el-icon class="is-loading"><i class="loading-ring"></i></el-icon>
+          <el-icon class="loading-icon"><Loading /></el-icon>
           <span>正在同步两个区服的曲库数据…</span>
         </div>
 
@@ -278,6 +283,23 @@ onUnmounted(() => {
                     >
                       <b>{{ item.shortLabel }}</b>
                       {{ song.regions[region]?.levels[item.key] }}
+                    </span>
+                    <span
+                      v-if="
+                        !hasStandardLevels(song, region) && !song.regions[region]?.worldEnd.length
+                      "
+                      class="no-levels"
+                      >—</span
+                    >
+                    <span
+                      v-for="(chart, index) in song.regions[region]?.worldEnd"
+                      :key="`${chart.kanji}-${chart.stars}-${index}`"
+                      class="world-end-chip"
+                      :title="`WORLD'S END ${chart.kanji} · ${chart.stars} 星`"
+                    >
+                      <b>WORLD'S END</b>
+                      <span class="world-end-kanji">{{ chart.kanji }}</span>
+                      <span class="world-end-stars">★ {{ chart.stars }}</span>
                     </span>
                   </template>
                   <span v-else class="no-levels">—</span>
