@@ -13,17 +13,11 @@ import {
   type Song,
 } from './catalog'
 
-type RegionFilter =
-  | 'all'
-  | 'JPN'
-  | 'EXP'
-  | 'CHN'
-  | 'both'
-  | 'jpn-only'
-  | 'exp-only'
-  | 'chn-only'
-  | 'chn-missing'
+// 三态收录筛选：0 = 不限，1 = 收录，2 = 未收录，点击复选框循环切换
+type RegionState = 0 | 1 | 2
 type Theme = 'light' | 'dark'
+
+const REGION_STATE_HINTS = ['不限', '收录', '未收录'] as const
 
 const themeStorageKey = 'chunithm-song-atlas-theme'
 const systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -49,7 +43,8 @@ const errorMessage = ref('')
 const keyword = ref('')
 const category = ref('')
 const difficulty = ref<DifficultyKey | ''>('')
-const regionFilter = ref<RegionFilter>('all')
+const emptyRegionStates = (): Record<Region, RegionState> => ({ JPN: 0, EXP: 0, CHN: 0 })
+const regionStates = ref<Record<Region, RegionState>>(emptyRegionStates())
 const currentPage = ref(1)
 const pageSize = ref(24)
 const failedCovers = ref(new Map<string, Set<string>>())
@@ -80,22 +75,13 @@ const filteredSongs = computed(() => {
       )
     const matchesCategory = !category.value || song.category === category.value
     const matchesDifficulty = !difficulty.value || hasDifficulty(song, difficulty.value)
-    const hasJpn = Boolean(song.regions.JPN)
-    const hasExp = Boolean(song.regions.EXP)
-    const hasChn = Boolean(song.regions.CHN)
-    const matchesRegion = {
-      all: true,
-      JPN: hasJpn,
-      EXP: hasExp,
-      CHN: hasChn,
-      both: hasJpn && hasExp,
-      'jpn-only': hasJpn && !hasExp,
-      'exp-only': hasExp && !hasJpn,
-      'chn-only': hasChn && !hasJpn && !hasExp,
-      'chn-missing': !hasChn && (hasJpn || hasExp),
-    }[regionFilter.value]
+    const matchesRegions = CATALOG_REGIONS.every((region) => {
+      const state = regionStates.value[region]
+      if (state === 0) return true
+      return state === 1 ? Boolean(song.regions[region]) : !song.regions[region]
+    })
 
-    return matchesKeyword && matchesCategory && matchesDifficulty && matchesRegion
+    return matchesKeyword && matchesCategory && matchesDifficulty && matchesRegions
   })
 })
 
@@ -105,7 +91,7 @@ const pagedSongs = computed(() => {
   return filteredSongs.value.slice(start, start + pageSize.value)
 })
 
-watch([keyword, category, difficulty, regionFilter, pageSize], () => {
+watch([keyword, category, difficulty, regionStates, pageSize], () => {
   currentPage.value = 1
 })
 
@@ -132,7 +118,12 @@ function clearFilters(): void {
   keyword.value = ''
   category.value = ''
   difficulty.value = ''
-  regionFilter.value = 'all'
+  regionStates.value = emptyRegionStates()
+}
+
+function cycleRegionState(region: Region): void {
+  const next = ((regionStates.value[region] + 1) % 3) as RegionState
+  regionStates.value = { ...regionStates.value, [region]: next }
 }
 
 function toggleTheme(): void {
@@ -232,17 +223,23 @@ onUnmounted(() => {
               :value="item.key"
             />
           </el-select>
-          <el-select v-model="regionFilter" placeholder="全部区服" aria-label="区服筛选">
-            <el-option label="全部区服" value="all" />
-            <el-option label="日本区已收录" value="JPN" />
-            <el-option label="国际区已收录" value="EXP" />
-            <el-option label="国服已收录" value="CHN" />
-            <el-option label="JPN + EXP 均收录" value="both" />
-            <el-option label="仅日本区收录" value="jpn-only" />
-            <el-option label="仅国际区收录" value="exp-only" />
-            <el-option label="仅国服收录" value="chn-only" />
-            <el-option label="国服未收录" value="chn-missing" />
-          </el-select>
+          <div class="region-checks" role="group" aria-label="按区服收录状态筛选">
+            <el-checkbox
+              v-for="region in regions"
+              :key="region"
+              :class="[
+                'region-check',
+                `region-check-${region.toLowerCase()}`,
+                { 'is-excluded': regionStates[region] === 2 },
+              ]"
+              :model-value="regionStates[region] === 1"
+              :indeterminate="regionStates[region] === 2"
+              :title="`点击循环：不限 → 收录 → 未收录（当前：${REGION_STATE_HINTS[regionStates[region]]}）`"
+              @change="cycleRegionState(region)"
+            >
+              {{ region }}
+            </el-checkbox>
+          </div>
           <el-button class="reset-button" text @click="clearFilters">重置</el-button>
         </section>
 
@@ -251,6 +248,7 @@ onUnmounted(() => {
           <span class="legend-item"><i class="legend-dot jpn"></i> JPN 日本区</span>
           <span class="legend-item"><i class="legend-dot exp"></i> EXP 国际区</span>
           <span class="legend-item"><i class="legend-dot chn"></i> CHN 中国区</span>
+          <span class="legend-item">勾选点击循环：不限 → ✓ 收录 → ― 未收录</span>
         </div>
 
         <el-alert

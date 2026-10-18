@@ -333,6 +333,46 @@ input {
   width: 100%;
 }
 
+.region-checks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 16px;
+  min-height: 40px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel-input);
+  box-shadow: var(--control-shadow);
+}
+
+.region-checks .el-checkbox {
+  height: 32px;
+  margin-right: 0;
+}
+
+.region-checks .el-checkbox__label {
+  font-size: 1em;
+  font-weight: 600;
+}
+
+.region-check-jpn .el-checkbox__label {
+  color: #73d9be;
+}
+
+.region-check-exp .el-checkbox__label {
+  color: #ffc773;
+}
+
+.region-check-chn .el-checkbox__label {
+  color: #f78989;
+}
+
+.region-check.is-excluded .el-checkbox__input.is-indeterminate .el-checkbox__inner {
+  background-color: #f56c6c;
+  border-color: #f56c6c;
+}
+
 .search-icon {
   color: var(--text-secondary);
   font-size: 21px;
