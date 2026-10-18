@@ -12,7 +12,7 @@ export const REGION_CONFIG = {
   },
 } as const
 
-export const CATALOG_REGIONS = ['JPN', 'EXP'] as const
+export const CATALOG_REGIONS = ['JPN', 'EXP', 'CHN'] as const
 export const COVER_REGIONS = ['JPN', 'EXP', 'CHN'] as const
 
 export const DIFFICULTIES = [
@@ -69,6 +69,7 @@ interface RawSong {
 const FEEDS: Record<Region, string> = {
   JPN: `${import.meta.env.BASE_URL}data/catalog-jpn.json`,
   EXP: `${import.meta.env.BASE_URL}data/catalog-exp.json`,
+  CHN: `${import.meta.env.BASE_URL}data/catalog-chn.json`,
 }
 
 export function normalizeTitle(title: string): string {
@@ -154,27 +155,24 @@ async function fetchCatalog(region: Region, signal: AbortSignal): Promise<Song[]
 }
 
 export async function loadCatalogs(signal: AbortSignal): Promise<Song[]> {
-  const [jpnSongs, expSongs] = await Promise.all([
-    fetchCatalog('JPN', signal),
-    fetchCatalog('EXP', signal),
-  ])
+  const catalogs = await Promise.all(CATALOG_REGIONS.map((region) => fetchCatalog(region, signal)))
   const songs = new Map<string, Song>()
 
-  for (const song of jpnSongs) {
-    songs.set(song.key, song)
-  }
-
-  for (const song of expSongs) {
-    const existing = songs.get(song.key)
-    if (existing) {
-      const expSong = song.regions.EXP
-      if (expSong) {
-        existing.regions.EXP = mergeRegionalSongs(existing.regions.EXP, expSong)
+  catalogs.forEach((catalog, index) => {
+    const region = CATALOG_REGIONS[index]
+    for (const song of catalog) {
+      const existing = songs.get(song.key)
+      if (!existing) {
+        songs.set(song.key, song)
+        continue
       }
-    } else {
-      songs.set(song.key, song)
+
+      const regionalSong = song.regions[region]
+      if (regionalSong) {
+        existing.regions[region] = mergeRegionalSongs(existing.regions[region], regionalSong)
+      }
     }
-  }
+  })
 
   return [...songs.values()]
 }

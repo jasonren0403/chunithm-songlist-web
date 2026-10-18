@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getSupersededCoverHashes, normalizeTitle } from './catalog-assets.mjs'
+import { parseLxnsCatalog } from './lxns-catalog.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DATA_DIR = join(ROOT, 'public', 'data')
@@ -30,6 +31,14 @@ const REGIONS = {
     imageBaseUrl: 'https://chunithm-net-eng.com/mobile/img/',
     outputFile: 'catalog-exp.json',
   },
+  chn: {
+    label: 'CHN',
+    // 国服曲库来自 lxns 查分器的公共 API，不传 version 参数即跟随国服当前版本。
+    // 曲目 ID 与 SEGA 官方一致；国服曲库是 JPN/EXP 的子集，封面复用其他区服，不单独下载。
+    source: 'lxns',
+    catalogUrl: 'https://maimai.lxns.net/api/v0/chunithm/song/list',
+    outputFile: 'catalog-chn.json',
+  },
 }
 
 async function fetchWithRetry(url, label, options = {}) {
@@ -55,10 +64,15 @@ async function fetchWithRetry(url, label, options = {}) {
 
 async function fetchCatalog(region) {
   const response = await fetchWithRetry(region.catalogUrl, `${region.label} 曲库`)
-  const catalog = await response.json()
+  const payload = await response.json()
+
+  if (region.source === 'lxns') {
+    return parseLxnsCatalog(payload)
+  }
+
   if (
-    !Array.isArray(catalog) ||
-    !catalog.every(
+    !Array.isArray(payload) ||
+    !payload.every(
       (song) =>
         song &&
         typeof song === 'object' &&
@@ -73,7 +87,7 @@ async function fetchCatalog(region) {
     throw new Error(`${region.label} 曲库数据格式异常，未写入本地数据`)
   }
 
-  return catalog
+  return payload
 }
 
 async function readPreviousCatalog(region) {
@@ -162,7 +176,7 @@ async function downloadCovers(region, catalog) {
     key: normalizeTitle(song.title),
     image: song.image,
   }))
-  const images = [...new Set(songImages.map(({ image }) => image))]
+  const images = [...new Set(songImages.map(({ image }) => image).filter(Boolean))]
   let nextIndex = 0
   let downloaded = 0
   const missingImages = new Set()
@@ -192,6 +206,7 @@ async function downloadCovers(region, catalog) {
   await Promise.all(workers)
   if (failure) throw failure
   for (const song of catalog) {
+    if (!song.image) continue
     song.image = missingImages.has(song.image) ? '' : `images/${region.name}/${song.image}`
   }
 
@@ -242,6 +257,10 @@ for (const { region, catalog, previousCatalog, coverStats } of results) {
     previousCatalog,
     coverStats.songImages,
   )
+  if (region.source === 'lxns') {
+    console.log(`${region.label}: ${catalog.length} 行曲目数据（封面复用 JPN/EXP，不单独下载）`)
+    continue
+  }
   console.log(
     `${region.label}: ${catalog.length} 首曲目，新增 ${coverStats.downloaded} 张封面（共 ${coverStats.total} 张）${coverStats.removed ? `，清理 ${coverStats.removed} 张封面 hash 已变化的旧图片` : ''}${coverStats.missing ? `，${coverStats.missing} 张封面源站返回 404，将显示其他区服封面或本地占位图` : ''}`,
   )

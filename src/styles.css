@@ -380,7 +380,7 @@ input {
 }
 
 .legend-dot.chn {
-  background: #7e8094;
+  background: #f78989;
 }
 
 .error-alert {
@@ -598,6 +598,10 @@ input {
 
 .region-code.exp {
   color: #ffc773;
+}
+
+.region-code.chn {
+  color: #f78989;
 }
 
 .difficulty-chip {

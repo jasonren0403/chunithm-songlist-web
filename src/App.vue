@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { Loading, Moon, Sunny } from '@element-plus/icons-vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import {
+  CATALOG_REGIONS,
   DIFFICULTIES,
   getCoverCandidates,
   hasDifficulty,
@@ -13,7 +14,16 @@ import {
   type Song,
 } from './catalog'
 
-type RegionFilter = 'all' | 'JPN' | 'EXP' | 'both' | 'jpn-only' | 'exp-only' | 'CHN'
+type RegionFilter =
+  | 'all'
+  | 'JPN'
+  | 'EXP'
+  | 'CHN'
+  | 'both'
+  | 'jpn-only'
+  | 'exp-only'
+  | 'chn-only'
+  | 'chn-missing'
 type Theme = 'light' | 'dark'
 
 const themeStorageKey = 'chunithm-song-atlas-theme'
@@ -44,7 +54,7 @@ const regionFilter = ref<RegionFilter>('all')
 const currentPage = ref(1)
 const pageSize = ref(24)
 const failedCovers = ref(new Map<string, Set<string>>())
-const regions: Region[] = ['JPN', 'EXP']
+const regions: readonly Region[] = CATALOG_REGIONS
 let requestController: AbortController | undefined
 
 const categories = computed(() => [...new Set(songs.value.map((song) => song.category))].sort())
@@ -73,14 +83,17 @@ const filteredSongs = computed(() => {
     const matchesDifficulty = !difficulty.value || hasDifficulty(song, difficulty.value)
     const hasJpn = Boolean(song.regions.JPN)
     const hasExp = Boolean(song.regions.EXP)
+    const hasChn = Boolean(song.regions.CHN)
     const matchesRegion = {
       all: true,
       JPN: hasJpn,
       EXP: hasExp,
+      CHN: hasChn,
       both: hasJpn && hasExp,
       'jpn-only': hasJpn && !hasExp,
       'exp-only': hasExp && !hasJpn,
-      CHN: true,
+      'chn-only': hasChn && !hasJpn && !hasExp,
+      'chn-missing': !hasChn && (hasJpn || hasExp),
     }[regionFilter.value]
 
     return matchesKeyword && matchesCategory && matchesDifficulty && matchesRegion
@@ -224,10 +237,12 @@ onUnmounted(() => {
             <el-option label="全部区服" value="all" />
             <el-option label="日本区已收录" value="JPN" />
             <el-option label="国际区已收录" value="EXP" />
+            <el-option label="国服已收录" value="CHN" />
             <el-option label="JPN + EXP 均收录" value="both" />
             <el-option label="仅日本区收录" value="jpn-only" />
             <el-option label="仅国际区收录" value="exp-only" />
-            <el-option label="中国区状态未知" value="CHN" />
+            <el-option label="仅国服收录" value="chn-only" />
+            <el-option label="国服未收录" value="chn-missing" />
           </el-select>
           <el-button class="reset-button" text @click="clearFilters">重置</el-button>
         </section>
@@ -236,7 +251,7 @@ onUnmounted(() => {
           <span>收录状态</span>
           <span class="legend-item"><i class="legend-dot jpn"></i> JPN 日本区</span>
           <span class="legend-item"><i class="legend-dot exp"></i> EXP 国际区</span>
-          <span class="legend-item"><i class="legend-dot chn"></i> CHN 未知</span>
+          <span class="legend-item"><i class="legend-dot chn"></i> CHN 中国区</span>
         </div>
 
         <el-alert
@@ -254,7 +269,7 @@ onUnmounted(() => {
 
         <div v-if="isLoading" class="loading-state" role="status">
           <el-icon class="loading-icon"><Loading /></el-icon>
-          <span>正在同步两个区服的曲库数据…</span>
+          <span>正在同步三个区服的曲库数据…</span>
         </div>
 
         <el-empty
@@ -313,7 +328,14 @@ onUnmounted(() => {
                 >
                   EXP {{ song.regions.EXP ? '收录' : '未收录' }}
                 </el-tag>
-                <el-tag type="info" effect="plain" round size="small">CHN 未知</el-tag>
+                <el-tag
+                  :type="song.regions.CHN ? 'danger' : 'info'"
+                  effect="dark"
+                  round
+                  size="small"
+                >
+                  CHN {{ song.regions.CHN ? '收录' : '未收录' }}
+                </el-tag>
               </div>
 
               <div class="difficulty-list">
@@ -372,7 +394,7 @@ onUnmounted(() => {
 
       <footer class="site-footer">
         <span>CHUNITHM SONG ATLAS</span>
-        <span>曲库数据来自 SEGA 官方网站 · 封面归原权利方所有</span>
+        <span>曲库数据来自 SEGA 官方网站与 lxns 查分器 · 封面归原权利方所有</span>
       </footer>
     </main>
   </el-config-provider>
