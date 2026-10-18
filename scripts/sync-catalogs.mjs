@@ -241,10 +241,38 @@ async function syncRegion(region) {
   return { region, catalog, previousCatalog, coverStats }
 }
 
+function printUsage() {
+  console.log('用法: pnpm sync:data [jpn] [exp] [chn]')
+  console.log('不传参数时同步全部区服；示例: pnpm sync:data chn 仅同步国服曲库。')
+}
+
+function resolveSelectedRegions(args) {
+  if (args.includes('--help') || args.includes('-h')) {
+    printUsage()
+    process.exit(0)
+  }
+  if (args.length === 0) return Object.keys(REGIONS)
+
+  const selected = []
+  for (const arg of args) {
+    const name = arg.trim().toLowerCase()
+    if (!Object.hasOwn(REGIONS, name)) {
+      console.error(`未知区服或参数 "${arg}"，可用区服: ${Object.keys(REGIONS).join(', ')}`)
+      printUsage()
+      process.exit(1)
+    }
+    if (!selected.includes(name)) selected.push(name)
+  }
+  return selected
+}
+
+const selectedRegions = resolveSelectedRegions(process.argv.slice(2))
+console.log(`本次同步区服: ${selectedRegions.map((name) => REGIONS[name].label).join(', ')}`)
+
 await mkdir(DATA_DIR, { recursive: true })
 
 const results = await Promise.all(
-  Object.entries(REGIONS).map(([name, config]) => syncRegion({ ...config, name })),
+  selectedRegions.map((name) => syncRegion({ ...REGIONS[name], name })),
 )
 
 for (const { region, catalog } of results) {
