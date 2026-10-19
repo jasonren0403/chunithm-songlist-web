@@ -10,7 +10,7 @@ pnpm run sync:data
 pnpm run dev
 ```
 
-`sync:data` 从官方曲库下载最新数据和全部可用封面，写入 `public/data/`、`public/images/jpn/` 和 `public/images/exp/`；国服曲库从 lxns API 下载并写入 `public/data/catalog-chn.json`。新增曲目及其封面可通过再次运行此命令同步；已有封面会先检查源站并复用。与上次数据相比，只有同一首仍在曲库中的歌曲更换了封面 hash 时才清理旧封面；已下架歌曲的旧封面会保留。若封面源站返回 404，该区服不再引用该封面，页面按 JPN、EXP、CHN 顺序尝试其他区服封面；若均不可用，则显示本地占位图。国服不单独下载封面：国服曲库目前是 JPN/EXP 的子集，封面直接复用其他区服（lxns 图床有访问频率限制，也避免了重复存储）。
+`sync:data` 从官方曲库下载最新数据和全部可用封面，写入 `public/data/`、`public/images/jpn/` 和 `public/images/exp/`；国服曲库从 lxns API 下载并写入 `public/data/catalog-chn.json`。支持传入区服参数以缩小更新范围，如 `pnpm sync:data chn` 仅同步国服、`pnpm sync:data jpn exp` 只同步日区与国际区；不传参数时同步全部区服。新增曲目及其封面可通过再次运行此命令同步；已有封面会先检查源站并复用。与上次数据相比，只有同一首仍在曲库中的歌曲更换了封面 hash 时才清理旧封面；已下架歌曲的旧封面会保留。若封面源站返回 404，该区服不再引用该封面，页面按 JPN、EXP、CHN 顺序尝试其他区服封面；若均不可用，则显示本地占位图。国服不单独下载封面：国服曲库目前是 JPN/EXP 的子集，封面直接复用其他区服（lxns 图床有访问频率限制，也避免了重复存储）。
 
 - JPN: `https://chunithm.sega.jp/storage/json/music.json`
 - EXP: `https://chunithm.sega.com/assets/data/music.json`
