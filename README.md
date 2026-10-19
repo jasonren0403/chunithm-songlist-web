@@ -16,6 +16,8 @@ pnpm run dev
 - EXP: `https://chunithm.sega.com/assets/data/music.json`
 - CHN: `https://maimai.lxns.net/api/v0/chunithm/song/list`（lxns 查分器公共 API，不传 version 参数即跟随国服当前版本）
 
+每次同步会自动对比本地上次曲库并标记变更：首次出现的条目写入 `added_at`（Unix 毫秒时间戳），等级、封面等内容发生变化的条目写入 `updated_at`（SEGA 的 `newflag` 新曲角标例行翻转不计入变更）；检测到曲目下架时会将其从曲库文件移除，并以完整快照记录到 `public/data/removed-jpn.json`、`removed-exp.json` 或 `removed-chn.json`（含 `removed_at`）；曲目重新上架时撤销下架记录并重新标记 `added_at`。`added_at` 缺失表示该曲目在启用变更追踪前就已收录。页面暂不消费这些字段，为“新增/下架”视图预留。
+
 打开终端中显示的本地地址即可使用。筛选支持曲名/曲师关键词、分类、谱面难度和区服收录情况，并可分页浏览。收录情况为一组三态复选框，点击循环切换：不限 → ✓ 收录 → ― 未收录；多个区服的条件同时生效（取交集）。
 
 页面支持暗色与亮色主题。首次访问会跟随系统外观设置；手动切换后会保存选择，后续访问优先使用该主题，并同步适配 Element Plus 控件。

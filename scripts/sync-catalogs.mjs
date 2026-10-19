@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { applyCatalogChanges } from './catalog-changes.mjs'
 import { getSupersededCoverHashes, normalizeTitle } from './catalog-assets.mjs'
 import { parseLxnsCatalog } from './lxns-catalog.mjs'
 
@@ -120,6 +121,38 @@ async function fileExists(filePath) {
     }
     throw error
   }
+}
+
+function removedCatalogPath(region) {
+  return join(DATA_DIR, `removed-${region.name}.json`)
+}
+
+async function readRemovedCatalog(region) {
+  const filePath = removedCatalogPath(region)
+  if (!(await fileExists(filePath))) return []
+
+  const removed = JSON.parse(await readFile(filePath, 'utf8'))
+  if (
+    !Array.isArray(removed) ||
+    !removed.every((song) => song && typeof song === 'object' && typeof song.title === 'string')
+  ) {
+    throw new Error(`${region.label} 现有下架曲目记录格式异常，无法安全合并`)
+  }
+
+  return removed
+}
+
+async function writeRemovedCatalog(region, removedSongs) {
+  const filePath = removedCatalogPath(region)
+  if (removedSongs.length === 0 && !(await fileExists(filePath))) return
+
+  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
+  await writeFile(temporaryPath, `${JSON.stringify(removedSongs, null, 2)}\n`, 'utf8')
+  await rename(temporaryPath, filePath)
+}
+
+function formatChangeStats(changeStats) {
+  return `新增 ${changeStats.added} 首、调整 ${changeStats.updated} 首、下架 ${changeStats.removed} 首（累计下架 ${changeStats.removedSongs.length} 首）`
 }
 
 async function downloadCover(region, image) {
@@ -275,22 +308,35 @@ const results = await Promise.all(
   selectedRegions.map((name) => syncRegion({ ...REGIONS[name], name })),
 )
 
+const syncedAt = Date.now()
+for (const result of results) {
+  result.changeStats = applyCatalogChanges({
+    previousCatalog: result.previousCatalog,
+    catalog: result.catalog,
+    previousRemoved: await readRemovedCatalog(result.region),
+    now: syncedAt,
+  })
+  await writeRemovedCatalog(result.region, result.changeStats.removedSongs)
+}
+
 for (const { region, catalog } of results) {
   await writeCatalog(region, catalog)
 }
 
-for (const { region, catalog, previousCatalog, coverStats } of results) {
+for (const { region, catalog, previousCatalog, coverStats, changeStats } of results) {
   coverStats.removed = await removeChangedCoverHashes(
     region,
     previousCatalog,
     coverStats.songImages,
   )
   if (region.source === 'lxns') {
-    console.log(`${region.label}: ${catalog.length} 行曲目数据（封面复用 JPN/EXP，不单独下载）`)
+    console.log(
+      `${region.label}: ${catalog.length} 行曲目数据（封面复用 JPN/EXP，不单独下载）；曲目变更：${formatChangeStats(changeStats)}`,
+    )
     continue
   }
   console.log(
-    `${region.label}: ${catalog.length} 首曲目，新增 ${coverStats.downloaded} 张封面（共 ${coverStats.total} 张）${coverStats.removed ? `，清理 ${coverStats.removed} 张封面 hash 已变化的旧图片` : ''}${coverStats.missing ? `，${coverStats.missing} 张封面源站返回 404，将显示其他区服封面或本地占位图` : ''}`,
+    `${region.label}: ${catalog.length} 首曲目，新增 ${coverStats.downloaded} 张封面（共 ${coverStats.total} 张）${coverStats.removed ? `，清理 ${coverStats.removed} 张封面 hash 已变化的旧图片` : ''}${coverStats.missing ? `，${coverStats.missing} 张封面源站返回 404，将显示其他区服封面或本地占位图` : ''}；曲目变更：${formatChangeStats(changeStats)}`,
   )
 }
 
