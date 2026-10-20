@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { applyCatalogChanges, songRowKey } from './catalog-changes.mjs'
+import {
+  applyCatalogChanges,
+  canonicalChangeTimestamp,
+  resolveChangeTimestamp,
+  songRowKey,
+} from './catalog-changes.mjs'
 
 const song = (overrides = {}) => ({
   id: '1',
@@ -22,6 +27,49 @@ const song = (overrides = {}) => ({
 
 const NOW = Date.parse('2026-10-19T00:00:00.000Z')
 const EARLIER = Date.parse('2026-10-01T00:00:00.000Z')
+
+test('canonicalChangeTimestamp 归一到变化当天（UTC+8）的 10:00', () => {
+  // 2026-10-19 15:23 UTC = 北京时间 19 日 23:23 → 19 日 10:00 UTC+8 = 02:00 UTC
+  assert.equal(
+    canonicalChangeTimestamp(Date.parse('2026-10-19T15:23:10.089Z')),
+    Date.parse('2026-10-19T02:00:00.000Z'),
+  )
+  // UTC 19 日 17:00 = 北京时间 20 日凌晨 01:00 → 按 UTC+8 日期归到 20 日 10:00
+  assert.equal(
+    canonicalChangeTimestamp(Date.parse('2026-10-19T17:00:00.000Z')),
+    Date.parse('2026-10-20T02:00:00.000Z'),
+  )
+  // 幂等：已是 10:00 UTC+8 的时刻保持不变
+  const canonical = Date.parse('2026-10-19T02:00:00.000Z')
+  assert.equal(canonicalChangeTimestamp(canonical), canonical)
+})
+
+test('resolveChangeTimestamp 按数据源选取基准时间', () => {
+  const syncTime = Date.parse('2026-10-20T15:00:00.000Z')
+  // SEGA：用 Last-Modified 所在日（文件真实修改日）
+  assert.equal(
+    resolveChangeTimestamp({ lastModified: 'Thu, 08 Oct 2026 02:59:03 GMT', syncTime }),
+    Date.parse('2026-10-08T02:00:00.000Z'),
+  )
+  // SEGA：Last-Modified 缺失时退回检测日
+  assert.equal(
+    resolveChangeTimestamp({ lastModified: null, syncTime }),
+    Date.parse('2026-10-20T02:00:00.000Z'),
+  )
+  assert.equal(
+    resolveChangeTimestamp({ lastModified: 'not-a-date', syncTime }),
+    Date.parse('2026-10-20T02:00:00.000Z'),
+  )
+  // lxns：即使有 Last-Modified 也忽略，用检测日
+  assert.equal(
+    resolveChangeTimestamp({
+      source: 'lxns',
+      lastModified: 'Thu, 08 Oct 2026 02:59:03 GMT',
+      syncTime,
+    }),
+    Date.parse('2026-10-20T02:00:00.000Z'),
+  )
+})
 
 test('新条目获得 added_at，已有条目原样保留', () => {
   const previous = [song({ added_at: EARLIER })]

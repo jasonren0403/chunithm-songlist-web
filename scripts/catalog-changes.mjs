@@ -12,6 +12,37 @@ const BOOKKEEPING_FIELDS = ['added_at', 'updated_at']
 // newflag 是 SEGA 官网的“新曲”角标，会例行翻转，不计入内容变更以避免噪音
 const VOLATILE_FIELDS = ['newflag']
 
+const DAY_MS = 24 * 60 * 60 * 1000
+const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000
+const CANONICAL_HOUR_MS = 10 * 60 * 60 * 1000
+
+/**
+ * 将任意时刻归一为其所在日（按 UTC+8 日期计算）的 10:00 UTC+8，返回 Unix 毫秒时间戳。
+ * 同一天内多次同步得到相同时间戳，保证幂等。
+ *
+ * @param {number} timeMs
+ * @returns {number}
+ */
+export function canonicalChangeTimestamp(timeMs) {
+  const dayIndex = Math.floor((timeMs + BEIJING_OFFSET_MS) / DAY_MS)
+  return dayIndex * DAY_MS - BEIJING_OFFSET_MS + CANONICAL_HOUR_MS
+}
+
+/**
+ * 决定本次同步的变更标记基准时间：
+ * - SEGA 官方 JSON 内容不含时间信息，取响应头 Last-Modified（文件真实修改时间）所在日
+ * - lxns 为动态接口、无任何更新时间可用，取同步检测时刻
+ * 两者统一归一为当天（UTC+8）10:00；Last-Modified 缺失或无法解析时退回检测时刻。
+ *
+ * @param {{ source?: string, lastModified?: string | null, syncTime: number }} options
+ * @returns {number} Unix 毫秒时间戳
+ */
+export function resolveChangeTimestamp({ source, lastModified, syncTime }) {
+  const lastModifiedTime = Date.parse(lastModified ?? '')
+  const base = source !== 'lxns' && Number.isFinite(lastModifiedTime) ? lastModifiedTime : syncTime
+  return canonicalChangeTimestamp(base)
+}
+
 export function songRowKey(song) {
   return `${song.id}::${song.we_kanji ?? ''}|${song.we_star ?? ''}`
 }

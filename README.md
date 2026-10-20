@@ -16,7 +16,7 @@ pnpm run dev
 - EXP: `https://chunithm.sega.com/assets/data/music.json`
 - CHN: `https://maimai.lxns.net/api/v0/chunithm/song/list`（lxns 查分器公共 API，不传 version 参数即跟随国服当前版本）
 
-每次同步会自动对比本地上次曲库并标记变更：首次出现的条目写入 `added_at`（Unix 毫秒时间戳），等级、封面等内容发生变化的条目写入 `updated_at`（SEGA 的 `newflag` 新曲角标例行翻转不计入变更）；检测到曲目下架时会将其从曲库文件移除，并以完整快照记录到 `public/data/removed-jpn.json`、`removed-exp.json` 或 `removed-chn.json`（含 `removed_at`）；曲目重新上架时撤销下架记录并重新标记 `added_at`。`added_at` 缺失表示该曲目在启用变更追踪前就已收录。页面暂不消费这些字段，为“新增/下架”视图预留。
+每次同步会自动对比本地上次曲库并标记变更：首次出现的条目写入 `added_at`，等级、封面等内容发生变化的条目写入 `updated_at`（SEGA 的 `newflag` 新曲角标例行翻转不计入变更）；检测到曲目下架时会将其从曲库文件移除，并以完整快照记录到 `public/data/removed-jpn.json`、`removed-exp.json` 或 `removed-chn.json`（含 `removed_at`）；曲目重新上架时撤销下架记录并重新标记 `added_at`。时间戳均为 Unix 毫秒数，并统一归一为变化当天（UTC+8）的 10:00，同一天内多次同步幂等。“变化当天”的判定：SEGA 官方 JSON 内容不含时间信息，取响应头 `Last-Modified`（文件真实修改时间）所在日，缺失时退回检测日；lxns 为动态接口、无任何更新时间可用，取同步检测日。`added_at` 缺失表示该曲目在启用变更追踪前就已收录。页面暂不消费这些字段，为“新增/下架”视图预留。
 
 打开终端中显示的本地地址即可使用。筛选支持曲名/曲师关键词、分类、谱面难度和区服收录情况，并可分页浏览。收录情况为一组三态复选框，点击循环切换：不限 → ✓ 收录 → ― 未收录；多个区服的条件同时生效（取交集）。
 

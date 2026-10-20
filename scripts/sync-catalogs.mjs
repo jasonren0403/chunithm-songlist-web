@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applyCatalogChanges } from './catalog-changes.mjs'
+import { applyCatalogChanges, resolveChangeTimestamp } from './catalog-changes.mjs'
 import { getSupersededCoverHashes, normalizeTitle } from './catalog-assets.mjs'
 import { parseLxnsCatalog } from './lxns-catalog.mjs'
 
@@ -65,10 +65,11 @@ async function fetchWithRetry(url, label, options = {}) {
 
 async function fetchCatalog(region) {
   const response = await fetchWithRetry(region.catalogUrl, `${region.label} 曲库`)
+  const lastModified = response.headers.get('last-modified')
   const payload = await response.json()
 
   if (region.source === 'lxns') {
-    return parseLxnsCatalog(payload)
+    return { rows: parseLxnsCatalog(payload), lastModified }
   }
 
   if (
@@ -88,7 +89,7 @@ async function fetchCatalog(region) {
     throw new Error(`${region.label} 曲库数据格式异常，未写入本地数据`)
   }
 
-  return payload
+  return { rows: payload, lastModified }
 }
 
 async function readPreviousCatalog(region) {
@@ -151,8 +152,13 @@ async function writeRemovedCatalog(region, removedSongs) {
   await rename(temporaryPath, filePath)
 }
 
-function formatChangeStats(changeStats) {
-  return `新增 ${changeStats.added} 首、调整 ${changeStats.updated} 首、下架 ${changeStats.removed} 首（累计下架 ${changeStats.removedSongs.length} 首）`
+function formatBeijingTime(timestamp) {
+  return `${new Date(timestamp + 8 * 60 * 60 * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC+8`
+}
+
+function formatChangeStats(changeStats, changeTimestamp) {
+  const hasChanges = changeStats.added + changeStats.updated + changeStats.removed > 0
+  return `新增 ${changeStats.added} 首、调整 ${changeStats.updated} 首、下架 ${changeStats.removed} 首（累计下架 ${changeStats.removedSongs.length} 首）${hasChanges ? `，标记时间 ${formatBeijingTime(changeTimestamp)}` : ''}`
 }
 
 async function downloadCover(region, image) {
@@ -269,9 +275,9 @@ async function writeCatalog(region, catalog) {
 async function syncRegion(region) {
   console.log(`${region.label}: 正在下载曲库…`)
   const previousCatalog = await readPreviousCatalog(region)
-  const catalog = await fetchCatalog(region)
-  const coverStats = await downloadCovers(region, catalog)
-  return { region, catalog, previousCatalog, coverStats }
+  const { rows, lastModified } = await fetchCatalog(region)
+  const coverStats = await downloadCovers(region, rows)
+  return { region, catalog: rows, previousCatalog, coverStats, lastModified }
 }
 
 function printUsage() {
@@ -308,13 +314,19 @@ const results = await Promise.all(
   selectedRegions.map((name) => syncRegion({ ...REGIONS[name], name })),
 )
 
-const syncedAt = Date.now()
+const syncTime = Date.now()
 for (const result of results) {
+  const changeTimestamp = resolveChangeTimestamp({
+    source: result.region.source,
+    lastModified: result.lastModified,
+    syncTime,
+  })
+  result.changeTimestamp = changeTimestamp
   result.changeStats = applyCatalogChanges({
     previousCatalog: result.previousCatalog,
     catalog: result.catalog,
     previousRemoved: await readRemovedCatalog(result.region),
-    now: syncedAt,
+    now: changeTimestamp,
   })
   await writeRemovedCatalog(result.region, result.changeStats.removedSongs)
 }
@@ -323,7 +335,14 @@ for (const { region, catalog } of results) {
   await writeCatalog(region, catalog)
 }
 
-for (const { region, catalog, previousCatalog, coverStats, changeStats } of results) {
+for (const {
+  region,
+  catalog,
+  previousCatalog,
+  coverStats,
+  changeStats,
+  changeTimestamp,
+} of results) {
   coverStats.removed = await removeChangedCoverHashes(
     region,
     previousCatalog,
@@ -331,12 +350,12 @@ for (const { region, catalog, previousCatalog, coverStats, changeStats } of resu
   )
   if (region.source === 'lxns') {
     console.log(
-      `${region.label}: ${catalog.length} 行曲目数据（封面复用 JPN/EXP，不单独下载）；曲目变更：${formatChangeStats(changeStats)}`,
+      `${region.label}: ${catalog.length} 行曲目数据（封面复用 JPN/EXP，不单独下载）；曲目变更：${formatChangeStats(changeStats, changeTimestamp)}`,
     )
     continue
   }
   console.log(
-    `${region.label}: ${catalog.length} 首曲目，新增 ${coverStats.downloaded} 张封面（共 ${coverStats.total} 张）${coverStats.removed ? `，清理 ${coverStats.removed} 张封面 hash 已变化的旧图片` : ''}${coverStats.missing ? `，${coverStats.missing} 张封面源站返回 404，将显示其他区服封面或本地占位图` : ''}；曲目变更：${formatChangeStats(changeStats)}`,
+    `${region.label}: ${catalog.length} 首曲目，新增 ${coverStats.downloaded} 张封面（共 ${coverStats.total} 张）${coverStats.removed ? `，清理 ${coverStats.removed} 张封面 hash 已变化的旧图片` : ''}${coverStats.missing ? `，${coverStats.missing} 张封面源站返回 404，将显示其他区服封面或本地占位图` : ''}；曲目变更：${formatChangeStats(changeStats, changeTimestamp)}`,
   )
 }
 
