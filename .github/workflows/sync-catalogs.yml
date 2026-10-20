@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: sync-catalogs
@@ -48,24 +49,37 @@ jobs:
           # shellcheck disable=SC2086
           node scripts/sync-catalogs.mjs $args 2>&1 | tee sync.log
 
-      - name: Commit and push changes
+      - name: Open or update sync PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "$(git status --porcelain public/)" ]; then
             echo "Catalogs unchanged, nothing to commit."
             exit 0
           fi
+          base="${GITHUB_REF#refs/heads/}"
+          branch="catalog-sync"
+          summary="$(grep -E '首曲目|行曲目数据' sync.log || true)"
+          body="$(printf '%s\n\n%s\n' "$summary" '自动曲库同步产物，重跑工作流会更新本 PR；请审核后手动合并。')"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B "$branch"
           git add public/data public/images
           git commit \
             -m "chore(data): sync catalogs (${ARGS:-all})" \
-            -m "$(grep -E '首曲目|行曲目数据' sync.log || true)"
-          # 远端若在这期间有新提交，先变基再推；冲突时任务失败，重跑即可
-          branch="${GITHUB_REF#refs/heads/}"
-          git fetch origin "$branch"
-          git rebase "origin/$branch"
-          git push origin "HEAD:$branch"
+            -m "$summary"
+          # 机器人专用分支：远端若是上次未合并的旧同步，直接以本次为准
+          git push --force origin "$branch"
+          if [ -z "$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')" ]; then
+            gh pr create \
+              --base "$base" \
+              --head "$branch" \
+              --title "chore(data): sync catalogs (${ARGS:-all})" \
+              --body "$body"
+          else
+            echo "Open PR for $branch already exists; the push updated it."
+          fi
 
       - name: Job summary
         if: always()
