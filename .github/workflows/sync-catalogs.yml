@@ -1,0 +1,83 @@
+name: Sync catalogs
+
+on:
+  schedule:
+    # 每日 02:30 UTC（UTC+8 10:30，国服更新 10:00 生效后）
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+    inputs:
+      regions:
+        description: '同步区服：all，或以空格/逗号分隔的 jpn、exp、chn 列表'
+        type: string
+        default: all
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-catalogs
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      REGIONS_INPUT: ${{ inputs.regions }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # 同步脚本零依赖，测试也只用 node:test，无需安装依赖
+      - name: Run sync script tests
+        run: node --test scripts/*.test.mjs
+
+      - name: Sync catalogs
+        run: |
+          set -euo pipefail
+          regions="${REGIONS_INPUT:-all}"
+          args=""
+          if [ "$regions" != "all" ]; then
+            args="$(echo "$regions" | tr ',' ' ')"
+          fi
+          echo "ARGS=$args" >> "$GITHUB_ENV"
+          # 脚本自身会校验区服名，非法值直接报错退出
+          # shellcheck disable=SC2086
+          node scripts/sync-catalogs.mjs $args 2>&1 | tee sync.log
+
+      - name: Commit and push changes
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain public/)" ]; then
+            echo "Catalogs unchanged, nothing to commit."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/data public/images
+          git commit \
+            -m "chore(data): sync catalogs (${ARGS:-all})" \
+            -m "$(grep -E '首曲目|行曲目数据' sync.log || true)"
+          # 远端若在这期间有新提交，先变基再推；冲突时任务失败，重跑即可
+          branch="${GITHUB_REF#refs/heads/}"
+          git fetch origin "$branch"
+          git rebase "origin/$branch"
+          git push origin "HEAD:$branch"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo '## Catalog sync'
+            echo
+            if [ -f sync.log ]; then
+              echo '```'
+              grep -E '本次同步区服|首曲目|行曲目数据|已同步' sync.log || tail -n 20 sync.log
+              echo '```'
+            else
+              echo '_Sync did not run._'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
