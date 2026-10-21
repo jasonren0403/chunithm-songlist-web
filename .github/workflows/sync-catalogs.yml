@@ -25,8 +25,23 @@ jobs:
     timeout-minutes: 20
     env:
       REGIONS_INPUT: ${{ inputs.regions }}
+      COVERS_REPO: jasonren0403/chunithm-songlist-covers
     steps:
+      - name: Check covers token
+        env:
+          COVERS_TOKEN: ${{ secrets.COVERS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${COVERS_TOKEN:-}" ]; then
+            echo "::error::需要配置 COVERS_TOKEN secret（对封面仓有读写权限的 PAT）"
+            exit 1
+          fi
+
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          # 封面仓为私有仓，submodule 拉取需要具备两个仓访问权限的 PAT
+          token: ${{ secrets.COVERS_TOKEN }}
 
       - uses: actions/setup-node@v7
         with:
@@ -48,6 +63,28 @@ jobs:
           # 脚本自身会校验区服名，非法值直接报错退出
           # shellcheck disable=SC2086
           node scripts/sync-catalogs.mjs $args 2>&1 | tee sync.log
+
+      # 封面在独立的 covers 仓（submodule），改动先提交到该仓，再回写主仓指针
+      - name: Commit cover updates to the covers repo
+        env:
+          COVERS_TOKEN: ${{ secrets.COVERS_TOKEN }}
+        run: |
+          set -euo pipefail
+          covers_dir="public/images"
+          if [ -z "$(git -C "$covers_dir" status --porcelain)" ]; then
+            echo "Covers unchanged."
+            exit 0
+          fi
+          if [ -z "${COVERS_TOKEN:-}" ]; then
+            echo "::error::需要配置 COVERS_TOKEN secret 才能向封面仓推送"
+            exit 1
+          fi
+          git -C "$covers_dir" config user.name 'github-actions[bot]'
+          git -C "$covers_dir" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C "$covers_dir" add -A
+          git -C "$covers_dir" commit -m "chore: update cover art (${ARGS:-all})"
+          git -C "$covers_dir" push \
+            "https://x-access-token:${COVERS_TOKEN}@github.com/${COVERS_REPO}.git" HEAD:main
 
       - name: Open or update sync PR
         env:
