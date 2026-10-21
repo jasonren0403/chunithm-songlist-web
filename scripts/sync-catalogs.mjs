@@ -222,7 +222,10 @@ async function downloadCovers(region, catalog) {
   }))
   const images = [...new Set(songImages.map(({ image }) => image).filter(Boolean))]
   if (images.length > 0 && !(await fileExists(join(IMAGE_DIR, '.git')))) {
-    throw new Error('封面 submodule 未初始化，请先执行：git submodule update --init --recursive')
+    console.warn(
+      '警告：封面 submodule 未初始化，封面将下载到本地 public/images/（不会提交到仓库）。' +
+        '拥有封面仓权限时可执行 git submodule update --init --recursive 使用 submodule。',
+    )
   }
   let nextIndex = 0
   let downloaded = 0

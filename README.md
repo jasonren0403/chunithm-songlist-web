@@ -10,15 +10,17 @@ pnpm run sync:data
 pnpm run dev
 ```
 
-封面图片存放在独立仓库 [chunithm-songlist-covers](https://github.com/jasonren0403/chunithm-songlist-covers)（私有），主仓通过 git submodule 挂载在 `public/images`。克隆主仓时需带 submodule：
+封面图片存放在独立仓库 [chunithm-songlist-covers](https://github.com/jasonren0403/chunithm-songlist-covers)（私有），主仓通过 git submodule 挂载在 `public/images`。**封面是可选增强**：缺少封面时站点依然可以正常构建和使用，卡片会显示占位图（封面回退链为 JPN → EXP → CHN）。
 
 ```sh
 git clone --recursive git@github.com:jasonren0403/chunithm-songlist-web.git
-# 已克隆但缺少封面时：
+# 已克隆但缺少封面 submodule 时：
 git submodule update --init --recursive
 ```
 
-没有封面 submodule 时执行 `sync:data` 会直接报错提示，不会重复下载全部封面。
+- **拥有封面仓权限**：按上面的命令拉取 submodule，封面随仓库版本管理；CI 通过 `COVERS_TOKEN` 拉取并更新指针。
+- **没有权限的公开克隆者**：直接 `git clone` 即可，站点照常构建（无封面时显示占位图）。若想本地也有封面，执行 `pnpm run sync:data` 会从官方 CDN 拉取到本地 `public/images/`，该路径已在 `.gitignore` 中忽略，不会进入仓库。
+- **部署**：产物中的封面来自构建时的 `public/images`，与仓库是否公开无关。
 
 `sync:data` 从官方曲库下载最新数据和全部可用封面，写入 `public/data/`、`public/images/jpn/` 和 `public/images/exp/`；国服曲库从 lxns API 下载并写入 `public/data/catalog-chn.json`。支持传入区服参数以缩小更新范围，如 `pnpm sync:data chn` 仅同步国服、`pnpm sync:data jpn exp` 只同步日区与国际区；不传参数时同步全部区服。新增曲目及其封面可通过再次运行此命令同步；已有封面会先检查源站并复用。与上次数据相比，只有同一首仍在曲库中的歌曲更换了封面 hash 时才清理旧封面；已下架歌曲的旧封面会保留。若封面源站返回 404，该区服不再引用该封面，页面按 JPN、EXP、CHN 顺序尝试其他区服封面；若均不可用，则显示本地占位图。国服不单独下载封面：国服曲库目前是 JPN/EXP 的子集，封面直接复用其他区服（lxns 图床有访问频率限制，也避免了重复存储）。
 

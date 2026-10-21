@@ -136,3 +136,7 @@ dist/
 .env.*
 !.env.example
 *.tsbuildinfo
+
+# 封面目录：已登记为指向私有封面仓的 submodule；
+# 未初始化时本地下载的封面同样不提交，避免封面进入公开仓库
+public/images/
