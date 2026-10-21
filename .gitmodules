@@ -1,0 +1,3 @@
+[submodule "public/images"]
+	path = public/images
+	url = https://github.com/jasonren0403/chunithm-songlist-covers.git

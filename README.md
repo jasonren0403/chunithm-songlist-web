@@ -10,6 +10,16 @@ pnpm run sync:data
 pnpm run dev
 ```
 
+封面图片存放在独立仓库 [chunithm-songlist-covers](https://github.com/jasonren0403/chunithm-songlist-covers)（私有），主仓通过 git submodule 挂载在 `public/images`。克隆主仓时需带 submodule：
+
+```sh
+git clone --recursive git@github.com:jasonren0403/chunithm-songlist-web.git
+# 已克隆但缺少封面时：
+git submodule update --init --recursive
+```
+
+没有封面 submodule 时执行 `sync:data` 会直接报错提示，不会重复下载全部封面。
+
 `sync:data` 从官方曲库下载最新数据和全部可用封面，写入 `public/data/`、`public/images/jpn/` 和 `public/images/exp/`；国服曲库从 lxns API 下载并写入 `public/data/catalog-chn.json`。支持传入区服参数以缩小更新范围，如 `pnpm sync:data chn` 仅同步国服、`pnpm sync:data jpn exp` 只同步日区与国际区；不传参数时同步全部区服。新增曲目及其封面可通过再次运行此命令同步；已有封面会先检查源站并复用。与上次数据相比，只有同一首仍在曲库中的歌曲更换了封面 hash 时才清理旧封面；已下架歌曲的旧封面会保留。若封面源站返回 404，该区服不再引用该封面，页面按 JPN、EXP、CHN 顺序尝试其他区服封面；若均不可用，则显示本地占位图。国服不单独下载封面：国服曲库目前是 JPN/EXP 的子集，封面直接复用其他区服（lxns 图床有访问频率限制，也避免了重复存储）。
 
 - JPN: `https://chunithm.sega.jp/storage/json/music.json`
@@ -18,7 +28,7 @@ pnpm run dev
 
 每次同步会自动对比本地上次曲库并标记变更：首次出现的条目写入 `added_at`，等级、封面等内容发生变化的条目写入 `updated_at`（SEGA 的 `newflag` 新曲角标例行翻转不计入变更）；检测到曲目下架时会将其从曲库文件移除，并以完整快照记录到 `public/data/removed-jpn.json`、`removed-exp.json` 或 `removed-chn.json`（含 `removed_at`）；曲目重新上架时撤销下架记录并重新标记 `added_at`。时间戳均为 Unix 毫秒数，并统一归一为变化当天（UTC+8）的 10:00，同一天内多次同步幂等。“变化当天”的判定：SEGA 官方 JSON 内容不含时间信息，取响应头 `Last-Modified`（文件真实修改时间）所在日，缺失时退回检测日；lxns 为动态接口、无任何更新时间可用，取同步检测日。`added_at` 缺失表示该曲目在启用变更追踪前就已收录。页面暂不消费这些字段，为“新增/下架”视图预留。
 
-仓库内置 GitHub Actions 工作流 `.github/workflows/sync-catalogs.yml`：每周四 10:30（UTC+8）自动全量同步，先运行同步脚本测试再执行；发现曲库或封面变化时**不直接推默认分支**，而是提交到 `catalog-sync` 分支并创建（或更新已存在的）Pull Request，审核后手动合并；重复触发只会刷新同一个 PR。也可在 Actions 页面手动触发，通过 `regions` 参数指定同步范围——`all`（默认）或以空格/逗号分隔的 `jpn`、`exp`、`chn` 列表，非法区服名会直接报错。
+仓库内置 GitHub Actions 工作流 `.github/workflows/sync-catalogs.yml`：每周四 10:30（UTC+8）自动全量同步，先运行同步脚本测试再执行；发现曲库或封面变化时**不直接推默认分支**，而是先把封面提交到私有封面仓，再在主仓创建（或更新已存在的）Pull Request 更新 submodule 指针，审核后手动合并；重复触发只会刷新同一个 PR。工作流需要配置 `COVERS_TOKEN` secret（对主仓与封面仓均有读写权限的 PAT），否则私有封面仓的 submodule 无法拉取。也可在 Actions 页面手动触发，通过 `regions` 参数指定同步范围——`all`（默认）或以空格/逗号分隔的 `jpn`、`exp`、`chn` 列表，非法区服名会直接报错。
 
 打开终端中显示的本地地址即可使用。筛选支持曲名/曲师关键词、分类、谱面难度和区服收录情况，并可分页浏览。收录情况为一组三态复选框，点击循环切换：不限 → ✓ 收录 → ― 未收录；多个区服的条件同时生效（取交集）。
 

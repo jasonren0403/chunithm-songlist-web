@@ -22,14 +22,16 @@ class HttpError extends Error {
 const REGIONS = {
   jpn: {
     label: 'JPN',
-    catalogUrl: 'https://chunithm.sega.jp/storage/json/music.json',
-    imageBaseUrl: 'https://new.chunithm-net.com/chuni-mobile/html/mobile/img/',
+    catalogUrl: process.env.CATALOG_URL_JPN ?? 'https://chunithm.sega.jp/storage/json/music.json',
+    imageBaseUrl:
+      process.env.IMAGE_BASE_URL_JPN ??
+      'https://new.chunithm-net.com/chuni-mobile/html/mobile/img/',
     outputFile: 'catalog-jpn.json',
   },
   exp: {
     label: 'EXP',
-    catalogUrl: 'https://chunithm.sega.com/assets/data/music.json',
-    imageBaseUrl: 'https://chunithm-net-eng.com/mobile/img/',
+    catalogUrl: process.env.CATALOG_URL_EXP ?? 'https://chunithm.sega.com/assets/data/music.json',
+    imageBaseUrl: process.env.IMAGE_BASE_URL_EXP ?? 'https://chunithm-net-eng.com/mobile/img/',
     outputFile: 'catalog-exp.json',
   },
   chn: {
@@ -37,7 +39,7 @@ const REGIONS = {
     // 国服曲库来自 lxns 查分器的公共 API，不传 version 参数即跟随国服当前版本。
     // 曲目 ID 与 SEGA 官方一致；国服曲库是 JPN/EXP 的子集，封面复用其他区服，不单独下载。
     source: 'lxns',
-    catalogUrl: 'https://maimai.lxns.net/api/v0/chunithm/song/list',
+    catalogUrl: process.env.CATALOG_URL_CHN ?? 'https://maimai.lxns.net/api/v0/chunithm/song/list',
     outputFile: 'catalog-chn.json',
   },
 }
@@ -164,6 +166,7 @@ function formatChangeStats(changeStats, changeTimestamp) {
 async function downloadCover(region, image) {
   const targetDir = join(IMAGE_DIR, region.name)
   const targetPath = join(targetDir, image)
+  const cached = await fileExists(targetPath)
 
   let response
   try {
@@ -176,6 +179,8 @@ async function downloadCover(region, image) {
     if (error instanceof Error && error.cause instanceof HttpError && error.cause.status === 404) {
       return 'missing'
     }
+    // 源站临时不可用时，若本地已有封面则继续复用，不中断整次同步
+    if (cached) return 'cached'
     throw error
   }
 
@@ -185,7 +190,7 @@ async function downloadCover(region, image) {
       `${region.label} 封面 ${image} 返回了非图片内容（${contentType || '未知类型'}）`,
     )
   }
-  if (await fileExists(targetPath)) return 'cached'
+  if (cached) return 'cached'
 
   response = await fetchWithRetry(
     new URL(encodeURIComponent(image), region.imageBaseUrl),
@@ -216,13 +221,16 @@ async function downloadCovers(region, catalog) {
     image: song.image,
   }))
   const images = [...new Set(songImages.map(({ image }) => image).filter(Boolean))]
+  if (images.length > 0 && !(await fileExists(join(IMAGE_DIR, '.git')))) {
+    throw new Error('封面 submodule 未初始化，请先执行：git submodule update --init --recursive')
+  }
   let nextIndex = 0
   let downloaded = 0
   const missingImages = new Set()
-  let failure
+  const failedImages = new Set()
 
   const workers = Array.from({ length: Math.min(CONCURRENCY, images.length) }, async () => {
-    while (!failure) {
+    while (true) {
       const index = nextIndex++
       if (index >= images.length) return
 
@@ -237,13 +245,17 @@ async function downloadCovers(region, catalog) {
           console.log(`${region.label}: ${index + 1}/${images.length} 封面已检查`)
         }
       } catch (error) {
-        failure = error
+        // 源站临时不可用时保留引用，等下次同步补齐，不中断整次同步
+        failedImages.add(images[index])
+        const reason = error instanceof Error ? error.message : String(error)
+        console.warn(
+          `${region.label}: 封面 ${images[index]} 获取失败（${reason}），保留引用待下次同步`,
+        )
       }
     }
   })
 
   await Promise.all(workers)
-  if (failure) throw failure
   for (const song of catalog) {
     if (!song.image) continue
     song.image = missingImages.has(song.image) ? '' : `images/${region.name}/${song.image}`
@@ -253,6 +265,7 @@ async function downloadCovers(region, catalog) {
     total: images.length,
     downloaded,
     missing: missingImages.size,
+    failed: failedImages.size,
     songImages,
   }
 }
@@ -355,7 +368,7 @@ for (const {
     continue
   }
   console.log(
-    `${region.label}: ${catalog.length} 首曲目，新增 ${coverStats.downloaded} 张封面（共 ${coverStats.total} 张）${coverStats.removed ? `，清理 ${coverStats.removed} 张封面 hash 已变化的旧图片` : ''}${coverStats.missing ? `，${coverStats.missing} 张封面源站返回 404，将显示其他区服封面或本地占位图` : ''}；曲目变更：${formatChangeStats(changeStats, changeTimestamp)}`,
+    `${region.label}: ${catalog.length} 首曲目，新增 ${coverStats.downloaded} 张封面（共 ${coverStats.total} 张）${coverStats.removed ? `，清理 ${coverStats.removed} 张封面 hash 已变化的旧图片` : ''}${coverStats.missing ? `，${coverStats.missing} 张封面源站返回 404，将显示其他区服封面或本地占位图` : ''}${coverStats.failed ? `，${coverStats.failed} 张封面因源站不可用未获取，保留引用待下次同步` : ''}；曲目变更：${formatChangeStats(changeStats, changeTimestamp)}`,
   )
 }
 
