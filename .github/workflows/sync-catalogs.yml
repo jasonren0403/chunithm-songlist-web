@@ -71,20 +71,28 @@ jobs:
         run: |
           set -euo pipefail
           covers_dir="public/images"
-          if [ -z "$(git -C "$covers_dir" status --porcelain)" ]; then
-            echo "Covers unchanged."
-            exit 0
-          fi
           if [ -z "${COVERS_TOKEN:-}" ]; then
             echo "::error::需要配置 COVERS_TOKEN secret 才能向封面仓推送"
             exit 1
           fi
-          git -C "$covers_dir" config user.name 'github-actions[bot]'
-          git -C "$covers_dir" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git -C "$covers_dir" add -A
-          git -C "$covers_dir" commit -m "chore: update cover art (${ARGS:-all})"
-          git -C "$covers_dir" push \
-            "https://x-access-token:${COVERS_TOKEN}@github.com/${COVERS_REPO}.git" HEAD:main
+          # 主仓记录的 submodule 指针可能落后于封面仓 main，先对齐再提交
+          git -C "$covers_dir" fetch origin main
+          if [ -n "$(git -C "$covers_dir" status --porcelain)" ]; then
+            git -C "$covers_dir" config user.name 'github-actions[bot]'
+            git -C "$covers_dir" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git -C "$covers_dir" add -A
+            git -C "$covers_dir" commit -m "chore: update cover art (${ARGS:-all})"
+            git -C "$covers_dir" rebase origin/main
+          else
+            # 无本地改动时也把 submodule 对齐到封面仓 main，避免主仓指针长期落后
+            git -C "$covers_dir" reset --hard origin/main
+          fi
+          if git -C "$covers_dir" diff --quiet origin/main HEAD; then
+            echo "Covers already up to date."
+          else
+            git -C "$covers_dir" push \
+              "https://x-access-token:${COVERS_TOKEN}@github.com/${COVERS_REPO}.git" HEAD:main
+          fi
 
       - name: Open or update sync PR
         env:
