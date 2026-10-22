@@ -97,25 +97,31 @@ jobs:
           fi
           base="${GITHUB_REF#refs/heads/}"
           branch="catalog-sync"
+          regions="${ARGS:-all}"
+          regions_label="$(echo "$regions" | tr ' ' ',')"
+          sync_date="$(TZ=Asia/Shanghai date +%F)"
+          title="chore(data): sync catalogs ${sync_date} (${regions_label})"
           summary="$(grep -E '首曲目|行曲目数据' sync.log || true)"
-          body="$(printf '%s\n\n%s\n' "$summary" '自动曲库同步产物，重跑工作流会更新本 PR；请审核后手动合并。')"
+          body="$(printf '%s\n\n%s\n' "$summary" '自动曲库同步产物，重跑工作流会更新本 PR 的标题与内容；请审核后手动合并。')"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git checkout -B "$branch"
           git add public/data public/images
           git commit \
-            -m "chore(data): sync catalogs (${ARGS:-all})" \
+            -m "chore(data): sync catalogs ${sync_date} (${regions_label})" \
             -m "$summary"
           # 机器人专用分支：远端若是上次未合并的旧同步，直接以本次为准
           git push --force origin "$branch"
-          if [ -z "$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')" ]; then
+          pr_number="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')"
+          if [ -n "$pr_number" ]; then
+            gh pr edit "$pr_number" --title "$title" --body "$body"
+            echo "PR #${pr_number} updated: ${title}"
+          else
             gh pr create \
               --base "$base" \
               --head "$branch" \
-              --title "chore(data): sync catalogs (${ARGS:-all})" \
+              --title "$title" \
               --body "$body"
-          else
-            echo "Open PR for $branch already exists; the push updated it."
           fi
 
       - name: Job summary
