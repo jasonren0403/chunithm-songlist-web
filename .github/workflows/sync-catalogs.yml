@@ -3,13 +3,20 @@ name: Sync catalogs
 on:
   schedule:
     # 每周四 02:30 UTC（UTC+8 10:30，国服更新 10:00 生效后）
-    - cron: '30 2 * * 4'
+    - cron: "30 2 * * 4"
   workflow_dispatch:
     inputs:
       regions:
-        description: '同步区服：all，或以空格/逗号分隔的 jpn、exp、chn 列表'
+        description: "同步区服：all，或以空格/逗号分隔的 jpn、exp、chn 列表"
         type: string
         default: all
+  # main 上的曲库/封面变化会让已开启的同步 PR 基点过期、产生冲突：
+  # 自动重建该 PR 的分支（分支始终基于最新 main 生成）
+  push:
+    branches: [main]
+    paths:
+      - "public/data/**"
+      - "public/images"
 
 permissions:
   contents: write
@@ -92,6 +99,14 @@ jobs:
           else
             git -C "$covers_dir" push \
               "https://x-access-token:${COVERS_TOKEN}@github.com/${COVERS_REPO}.git" HEAD:main
+          fi
+          # 主仓记录的 submodule 指针必须指向封面仓 main 上真实存在的提交，
+          # 否则合并后他人的 submodule 初始化会失败
+          remote_head="$(git -C "$covers_dir" ls-remote origin main | cut -f1)"
+          local_head="$(git -C "$covers_dir" rev-parse HEAD)"
+          if [ "$remote_head" != "$local_head" ]; then
+            echo "::error::封面 submodule 指针 ${local_head} 不在封面仓 main（${remote_head}）上，已中止以避免主仓引用不存在的提交"
+            exit 1
           fi
 
       - name: Open or update sync PR
