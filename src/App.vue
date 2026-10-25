@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import { computed, onMounted, onUnmounted, ref, watch } from "vue"
+import { ElMessage } from "element-plus"
+import zhCn from "element-plus/es/locale/lang/zh-cn"
 import {
   CATALOG_REGIONS,
   DIFFICULTIES,
@@ -11,23 +11,23 @@ import {
   type DifficultyKey,
   type Region,
   type Song,
-} from './catalog'
+} from "./catalog"
 
 // 三态收录筛选：0 = 不限，1 = 收录，2 = 未收录，点击复选框循环切换
 type RegionState = 0 | 1 | 2
-type Theme = 'light' | 'dark'
+type Theme = "light" | "dark"
 
-const REGION_STATE_HINTS = ['不限', '收录', '未收录'] as const
+const REGION_STATE_HINTS = ["不限", "收录", "未收录"] as const
 
-const themeStorageKey = 'chunithm-song-atlas-theme'
-const systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
+const themeStorageKey = "chunithm-song-atlas-theme"
+const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)")
 
 function loadSavedTheme(): Theme | null {
   try {
     const savedTheme = localStorage.getItem(themeStorageKey)
-    return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : null
+    return savedTheme === "light" || savedTheme === "dark" ? savedTheme : null
   } catch (error) {
-    console.error('Unable to read the saved theme preference.', error)
+    console.error("Unable to read the saved theme preference.", error)
     return null
   }
 }
@@ -35,14 +35,14 @@ function loadSavedTheme(): Theme | null {
 const manualTheme = ref<Theme | null>(loadSavedTheme())
 const systemPrefersDark = ref(systemThemeQuery.matches)
 const theme = computed<Theme>(
-  () => manualTheme.value ?? (systemPrefersDark.value ? 'dark' : 'light'),
+  () => manualTheme.value ?? (systemPrefersDark.value ? "dark" : "light"),
 )
 const songs = ref<Song[]>([])
 const isLoading = ref(true)
-const errorMessage = ref('')
-const keyword = ref('')
-const category = ref('')
-const difficulty = ref<DifficultyKey | ''>('')
+const errorMessage = ref("")
+const keyword = ref("")
+const category = ref("")
+const difficulty = ref<DifficultyKey | "">("")
 const emptyRegionStates = (): Record<Region, RegionState> => ({ JPN: 0, EXP: 0, CHN: 0 })
 const regionStates = ref<Record<Region, RegionState>>(emptyRegionStates())
 const currentPage = ref(1)
@@ -56,10 +56,10 @@ const categories = computed(() => [...new Set(songs.value.map((song) => song.cat
 watch(
   theme,
   (value) => {
-    document.documentElement.classList.toggle('dark', value === 'dark')
+    document.documentElement.classList.toggle("dark", value === "dark")
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', value === 'dark' ? '#10111b' : '#f4f5fb')
+      ?.setAttribute("content", value === "dark" ? "#10111b" : "#f4f5fb")
   },
   { immediate: true },
 )
@@ -100,13 +100,13 @@ async function refreshCatalog(): Promise<void> {
   const controller = new AbortController()
   requestController = controller
   isLoading.value = true
-  errorMessage.value = ''
+  errorMessage.value = ""
 
   try {
     songs.value = await loadCatalogs(controller.signal)
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') return
-    const message = error instanceof Error ? error.message : '发生未知错误'
+    if (error instanceof DOMException && error.name === "AbortError") return
+    const message = error instanceof Error ? error.message : "发生未知错误"
     errorMessage.value = `${message}，请检查网络后重试。`
     ElMessage.error(errorMessage.value)
   } finally {
@@ -115,9 +115,9 @@ async function refreshCatalog(): Promise<void> {
 }
 
 function clearFilters(): void {
-  keyword.value = ''
-  category.value = ''
-  difficulty.value = ''
+  keyword.value = ""
+  category.value = ""
+  difficulty.value = ""
   regionStates.value = emptyRegionStates()
 }
 
@@ -127,12 +127,12 @@ function cycleRegionState(region: Region): void {
 }
 
 function toggleTheme(): void {
-  const nextTheme = theme.value === 'dark' ? 'light' : 'dark'
+  const nextTheme = theme.value === "dark" ? "light" : "dark"
   manualTheme.value = nextTheme
   try {
     localStorage.setItem(themeStorageKey, nextTheme)
   } catch (error) {
-    console.error('Unable to save the theme preference.', error)
+    console.error("Unable to save the theme preference.", error)
   }
 }
 
@@ -157,12 +157,12 @@ function hasStandardLevels(song: Song, region: Region): boolean {
 }
 
 onMounted(() => {
-  systemThemeQuery.addEventListener('change', handleSystemThemeChange)
+  systemThemeQuery.addEventListener("change", handleSystemThemeChange)
   void refreshCatalog()
 })
 
 onUnmounted(() => {
-  systemThemeQuery.removeEventListener('change', handleSystemThemeChange)
+  systemThemeQuery.removeEventListener("change", handleSystemThemeChange)
   requestController?.abort()
 })
 </script>
@@ -193,7 +193,7 @@ onUnmounted(() => {
             @click="toggleTheme"
           >
             <el-icon><Sunny v-if="theme === 'dark'" /><Moon v-else /></el-icon>
-            {{ theme === 'dark' ? '亮色模式' : '暗色模式' }}
+            {{ theme === "dark" ? "亮色模式" : "暗色模式" }}
           </el-button>
           <div class="live-mark"><i></i> 官方曲库同步</div>
         </div>
@@ -306,7 +306,7 @@ onUnmounted(() => {
                 </span>
               </div>
               <h3 :title="song.title">{{ song.title }}</h3>
-              <p class="artist">{{ song.artist || '曲师信息暂无' }}</p>
+              <p class="artist">{{ song.artist || "曲师信息暂无" }}</p>
 
               <div class="availability" aria-label="各区服收录状态">
                 <el-tag
@@ -315,7 +315,7 @@ onUnmounted(() => {
                   round
                   size="small"
                 >
-                  JPN {{ song.regions.JPN ? '收录' : '未收录' }}
+                  JPN {{ song.regions.JPN ? "收录" : "未收录" }}
                 </el-tag>
                 <el-tag
                   :type="song.regions.EXP ? 'warning' : 'info'"
@@ -323,7 +323,7 @@ onUnmounted(() => {
                   round
                   size="small"
                 >
-                  EXP {{ song.regions.EXP ? '收录' : '未收录' }}
+                  EXP {{ song.regions.EXP ? "收录" : "未收录" }}
                 </el-tag>
                 <el-tag
                   :type="song.regions.CHN ? 'danger' : 'info'"
@@ -331,7 +331,7 @@ onUnmounted(() => {
                   round
                   size="small"
                 >
-                  CHN {{ song.regions.CHN ? '收录' : '未收录' }}
+                  CHN {{ song.regions.CHN ? "收录" : "未收录" }}
                 </el-tag>
               </div>
 

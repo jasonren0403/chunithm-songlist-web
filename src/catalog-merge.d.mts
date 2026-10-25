@@ -1,4 +1,4 @@
-import type { RegionalSong } from './catalog'
+import type { RegionalSong } from "./catalog"
 
 export declare function mergeRegionalSongs(
   existing: RegionalSong | undefined,

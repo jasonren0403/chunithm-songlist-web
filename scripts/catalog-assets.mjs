@@ -1,5 +1,5 @@
 export function normalizeTitle(title) {
-  return title.normalize('NFKC').trim().replace(/\s+/g, '').toLocaleLowerCase()
+  return title.normalize("NFKC").trim().replace(/\s+/g, "").toLocaleLowerCase()
 }
 
 export function getSupersededCoverHashes(region, previousCatalog, currentSongImages) {
@@ -15,7 +15,7 @@ export function getSupersededCoverHashes(region, previousCatalog, currentSongIma
     if (!previousImage.startsWith(imagePrefix)) continue
 
     const oldHash = previousImage.slice(imagePrefix.length)
-    if (!/^[\w.-]+$/.test(oldHash) || oldHash === '.' || oldHash === '..') continue
+    if (!/^[\w.-]+$/.test(oldHash) || oldHash === "." || oldHash === "..") continue
 
     if (!currentImage) {
       deletedSongHashes.add(oldHash)

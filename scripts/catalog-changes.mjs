@@ -8,9 +8,9 @@
 // 条目身份：同一区服内以 id + WORLD'S END 标记区分行
 // （lxns 转换出的 WE 行可能与原曲共享 id，SEGA 官方 WE 行有独立 id）。
 
-const BOOKKEEPING_FIELDS = ['added_at', 'updated_at']
+const BOOKKEEPING_FIELDS = ["added_at", "updated_at"]
 // newflag 是 SEGA 官网的“新曲”角标，会例行翻转，不计入内容变更以避免噪音
-const VOLATILE_FIELDS = ['newflag']
+const VOLATILE_FIELDS = ["newflag"]
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000
@@ -38,13 +38,13 @@ export function canonicalChangeTimestamp(timeMs) {
  * @returns {number} Unix 毫秒时间戳
  */
 export function resolveChangeTimestamp({ source, lastModified, syncTime }) {
-  const lastModifiedTime = Date.parse(lastModified ?? '')
-  const base = source !== 'lxns' && Number.isFinite(lastModifiedTime) ? lastModifiedTime : syncTime
+  const lastModifiedTime = Date.parse(lastModified ?? "")
+  const base = source !== "lxns" && Number.isFinite(lastModifiedTime) ? lastModifiedTime : syncTime
   return canonicalChangeTimestamp(base)
 }
 
 export function songRowKey(song) {
-  return `${song.id}::${song.we_kanji ?? ''}|${song.we_star ?? ''}`
+  return `${song.id}::${song.we_kanji ?? ""}|${song.we_star ?? ""}`
 }
 
 export function songContentKey(song) {

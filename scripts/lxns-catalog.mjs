@@ -1,6 +1,6 @@
-const LEVEL_KEYS = ['lev_bas', 'lev_adv', 'lev_exp', 'lev_mas', 'lev_ult']
+const LEVEL_KEYS = ["lev_bas", "lev_adv", "lev_exp", "lev_mas", "lev_ult"]
 
-const emptyLevels = () => Object.fromEntries(LEVEL_KEYS.map((key) => [key, '']))
+const emptyLevels = () => Object.fromEntries(LEVEL_KEYS.map((key) => [key, ""]))
 
 /**
  * 将 lxns 的单条曲目转换为与 SEGA music.json 同构的行。
@@ -32,7 +32,7 @@ export function lxnsSongToRawSongs(song) {
   for (const chart of song.difficulties ?? []) {
     if (chart.difficulty >= 0 && chart.difficulty <= 4) {
       hasStandardChart = true
-      levels[LEVEL_KEYS[chart.difficulty]] = String(chart.level ?? '')
+      levels[LEVEL_KEYS[chart.difficulty]] = String(chart.level ?? "")
     } else if (chart.difficulty === 5) {
       worldEndCharts.push(chart)
     }
@@ -40,24 +40,24 @@ export function lxnsSongToRawSongs(song) {
 
   const base = {
     id: String(song.id),
-    catname: typeof song.genre === 'string' ? song.genre : '',
-    newflag: '0',
+    catname: typeof song.genre === "string" ? song.genre : "",
+    newflag: "0",
     title: song.title,
-    reading: '',
-    artist: typeof song.artist === 'string' ? song.artist : '',
-    image: '',
+    reading: "",
+    artist: typeof song.artist === "string" ? song.artist : "",
+    image: "",
   }
 
   const rows = []
   if (hasStandardChart || worldEndCharts.length === 0) {
-    rows.push({ ...base, ...levels, we_kanji: '', we_star: '' })
+    rows.push({ ...base, ...levels, we_kanji: "", we_star: "" })
   }
   for (const chart of worldEndCharts) {
     rows.push({
       ...base,
       ...emptyLevels(),
-      we_kanji: String(chart.kanji ?? ''),
-      we_star: String(chart.star ?? ''),
+      we_kanji: String(chart.kanji ?? ""),
+      we_star: String(chart.star ?? ""),
     })
   }
 
@@ -73,19 +73,19 @@ export function lxnsSongToRawSongs(song) {
 export function parseLxnsCatalog(payload) {
   if (
     !payload ||
-    typeof payload !== 'object' ||
+    typeof payload !== "object" ||
     !Array.isArray(payload.songs) ||
     !payload.songs.every(
       (song) =>
         song &&
-        typeof song === 'object' &&
-        (typeof song.id === 'number' || typeof song.id === 'string') &&
-        typeof song.title === 'string' &&
+        typeof song === "object" &&
+        (typeof song.id === "number" || typeof song.id === "string") &&
+        typeof song.title === "string" &&
         song.title.length > 0 &&
         Array.isArray(song.difficulties),
     )
   ) {
-    throw new Error('CHN 曲库数据格式异常，未写入本地数据')
+    throw new Error("CHN 曲库数据格式异常，未写入本地数据")
   }
 
   return payload.songs.flatMap((song) => lxnsSongToRawSongs(song))

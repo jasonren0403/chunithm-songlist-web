@@ -1,31 +1,31 @@
-import { mergeRegionalSongs } from './catalog-merge.mjs'
+import { mergeRegionalSongs } from "./catalog-merge.mjs"
 
 export const REGION_CONFIG = {
   JPN: {
-    label: '日本区',
+    label: "日本区",
   },
   EXP: {
-    label: '国际区',
+    label: "国际区",
   },
   CHN: {
-    label: '中国区',
+    label: "中国区",
   },
 } as const
 
-export const CATALOG_REGIONS = ['JPN', 'EXP', 'CHN'] as const
-export const COVER_REGIONS = ['JPN', 'EXP', 'CHN'] as const
+export const CATALOG_REGIONS = ["JPN", "EXP", "CHN"] as const
+export const COVER_REGIONS = ["JPN", "EXP", "CHN"] as const
 
 export const DIFFICULTIES = [
-  { key: 'lev_bas', label: 'BASIC', shortLabel: 'BAS' },
-  { key: 'lev_adv', label: 'ADVANCED', shortLabel: 'ADV' },
-  { key: 'lev_exp', label: 'EXPERT', shortLabel: 'EXP' },
-  { key: 'lev_mas', label: 'MASTER', shortLabel: 'MAS' },
-  { key: 'lev_ult', label: 'ULTIMA', shortLabel: 'ULT' },
+  { key: "lev_bas", label: "BASIC", shortLabel: "BAS" },
+  { key: "lev_adv", label: "ADVANCED", shortLabel: "ADV" },
+  { key: "lev_exp", label: "EXPERT", shortLabel: "EXP" },
+  { key: "lev_mas", label: "MASTER", shortLabel: "MAS" },
+  { key: "lev_ult", label: "ULTIMA", shortLabel: "ULT" },
 ] as const
 
 export type Region = (typeof CATALOG_REGIONS)[number]
 export type CoverRegion = (typeof COVER_REGIONS)[number]
-export type DifficultyKey = (typeof DIFFICULTIES)[number]['key']
+export type DifficultyKey = (typeof DIFFICULTIES)[number]["key"]
 export type DifficultyLevels = Record<DifficultyKey, string>
 export type RegionSongs = Partial<Record<CoverRegion, RegionalSong>>
 
@@ -73,7 +73,7 @@ const FEEDS: Record<Region, string> = {
 }
 
 export function normalizeTitle(title: string): string {
-  return title.normalize('NFKC').trim().replace(/\s+/g, '').toLocaleLowerCase()
+  return title.normalize("NFKC").trim().replace(/\s+/g, "").toLocaleLowerCase()
 }
 
 export function getCoverCandidates(song: Song): string[] {
@@ -84,26 +84,26 @@ export function getCoverCandidates(song: Song): string[] {
 }
 
 function isRawSong(value: unknown): value is RawSong {
-  if (typeof value !== 'object' || value === null) return false
+  if (typeof value !== "object" || value === null) return false
 
   const song = value as Record<string, unknown>
   return [
-    'id',
-    'title',
-    'reading',
-    'artist',
-    'catname',
-    'image',
+    "id",
+    "title",
+    "reading",
+    "artist",
+    "catname",
+    "image",
     ...DIFFICULTIES.map(({ key }) => key),
-    'we_kanji',
-    'we_star',
-  ].every((field) => typeof song[field] === 'string')
+    "we_kanji",
+    "we_star",
+  ].every((field) => typeof song[field] === "string")
 }
 
 function toRegionalSong(song: RawSong): RegionalSong {
   return {
     id: song.id,
-    image: song.image ? `${import.meta.env.BASE_URL}${song.image.replace(/^\//, '')}` : '',
+    image: song.image ? `${import.meta.env.BASE_URL}${song.image.replace(/^\//, "")}` : "",
     levels: {
       lev_bas: song.lev_bas,
       lev_adv: song.lev_adv,
