@@ -44,7 +44,10 @@ export function resolveChangeTimestamp({ source, lastModified, syncTime }) {
 }
 
 export function songRowKey(song) {
-  return `${song.id}::${song.we_kanji ?? ""}|${song.we_star ?? ""}`
+  const isUltimaOnly =
+    song.lev_ult && !song.lev_bas && !song.lev_adv && !song.lev_exp && !song.lev_mas
+  const chartType = isUltimaOnly ? "ultima" : "standard"
+  return `${song.id}::${song.we_kanji ?? ""}|${song.we_star ?? ""}::${chartType}`
 }
 
 export function songContentKey(song) {
@@ -83,12 +86,14 @@ export function applyCatalogChanges({ previousCatalog, catalog, previousRemoved 
 
     const previous = previousByKey.get(key)
     if (!previous) {
-      song.added_at = now
+      if (song.added_at === undefined || song.added_at === null) song.added_at = now
       added += 1
       continue
     }
 
-    if (previous.added_at) song.added_at = previous.added_at
+    if (previous.added_at !== undefined && previous.added_at !== null) {
+      song.added_at = previous.added_at
+    } else if (song.added_at === undefined || song.added_at === null) song.added_at = now
     if (songContentKey(previous) !== songContentKey(song)) {
       song.updated_at = now
       updated += 1

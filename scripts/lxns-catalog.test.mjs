@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { lxnsSongToRawSongs, parseLxnsCatalog } from "./lxns-catalog.mjs"
 
-test("常规曲目转换为单行，包含五个难度等级", () => {
+test("常规曲目与 ULTIMA 谱面分别转换为独立行", () => {
   const rows = lxnsSongToRawSongs({
     id: 3,
     title: "B.B.K.K.B.K.K.",
@@ -17,7 +17,7 @@ test("常规曲目转换为单行，包含五个难度等级", () => {
     ],
   })
 
-  assert.equal(rows.length, 1)
+  assert.equal(rows.length, 2)
   assert.deepEqual(rows[0], {
     id: "3",
     catname: "其他游戏",
@@ -30,10 +30,12 @@ test("常规曲目转换为单行，包含五个难度等级", () => {
     lev_adv: "6",
     lev_exp: "10",
     lev_mas: "12+",
-    lev_ult: "13+",
+    lev_ult: "",
     we_kanji: "",
     we_star: "",
   })
+  assert.equal(rows[1].lev_ult, "13+")
+  assert.equal(rows[1].lev_bas, "")
 })
 
 test("缺失的难度留空字符串", () => {

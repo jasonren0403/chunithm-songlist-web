@@ -28,7 +28,7 @@ git submodule update --init --recursive
 - EXP: `https://chunithm.sega.com/assets/data/music.json`
 - CHN: `https://maimai.lxns.net/api/v0/chunithm/song/list`（lxns 查分器公共 API，不传 version 参数即跟随国服当前版本）
 
-每次同步会自动对比本地上次曲库并标记变更：首次出现的条目写入 `added_at`，等级、封面等内容发生变化的条目写入 `updated_at`（SEGA 的 `newflag` 新曲角标例行翻转不计入变更）；检测到曲目下架时会将其从曲库文件移除，并以完整快照记录到 `public/data/removed-jpn.json`、`removed-exp.json` 或 `removed-chn.json`（含 `removed_at`）；曲目重新上架时撤销下架记录并重新标记 `added_at`。时间戳均为 Unix 毫秒数，并统一归一为变化当天（UTC+8）的 10:00，同一天内多次同步幂等。“变化当天”的判定：SEGA 官方 JSON 内容不含时间信息，取响应头 `Last-Modified`（文件真实修改时间）所在日，缺失时退回检测日；lxns 为动态接口、无任何更新时间可用，取同步检测日。`added_at` 缺失表示该曲目在启用变更追踪前就已收录。页面暂不消费这些字段，为“新增/下架”视图预留。
+每次同步会自动对比本地上次曲库并标记变更：首次出现的条目写入 `added_at`，等级、封面等内容发生变化的条目写入 `updated_at`（SEGA 的 `newflag` 新曲角标例行翻转不计入变更）；检测到曲目下架时会将其从曲库文件移除，并以完整快照记录到 `public/data/removed-jpn.json`、`removed-exp.json` 或 `removed-chn.json`（含 `removed_at`）；曲目重新上架时撤销下架记录并重新标记 `added_at`。时间戳均为 Unix 毫秒数，并统一归一为变化当天（UTC+8）的 10:00，同一天内多次同步幂等。“变化当天”的判定：SEGA 官方 JSON 内容不含时间信息，取响应头 `Last-Modified`（文件真实修改时间）所在日，缺失时退回检测日；lxns 的 ULTIMA 与 WORLD'S END 谱面优先使用各自的 `release_date`，常规谱面使用曲目级 `release_date`；曲目级日期缺失或无效时退回同步检测日。`added_at` 缺失表示该曲目在启用变更追踪前就已收录。页面暂不消费这些字段，为“新增/下架”视图预留。
 
 仓库内置 GitHub Actions 工作流 `.github/workflows/sync-catalogs.yml`：每周四 10:30（UTC+8）自动全量同步，先运行同步脚本测试再执行；发现曲库或封面变化时**不直接推默认分支**，而是先把封面提交到私有封面仓，再在主仓创建（或更新已存在的）Pull Request 更新 submodule 指针，审核后手动合并；重复触发只会刷新同一个 PR。工作流需要配置 `COVERS_TOKEN` secret（对主仓与封面仓均有读写权限的 PAT），否则私有封面仓的 submodule 无法拉取。也可在 Actions 页面手动触发，通过 `regions` 参数指定同步范围——`all`（默认）或以空格/逗号分隔的 `jpn`、`exp`、`chn` 列表，非法区服名会直接报错。
 
