@@ -72,7 +72,13 @@ export function songContentKey(song) {
  *   removedSongs: Array<Record<string, string>>,
  * }} 本次新增/调整/下架数量与合并后的完整下架记录
  */
-export function applyCatalogChanges({ previousCatalog, catalog, previousRemoved = [], now }) {
+export function applyCatalogChanges({
+  previousCatalog,
+  catalog,
+  previousRemoved = [],
+  now,
+  preferIncomingAddedAt = false,
+}) {
   const previousByKey = new Map(previousCatalog.map((song) => [songRowKey(song), song]))
   const removedByKey = new Map(previousRemoved.map((song) => [songRowKey(song), song]))
 
@@ -91,9 +97,12 @@ export function applyCatalogChanges({ previousCatalog, catalog, previousRemoved 
       continue
     }
 
-    if (previous.added_at !== undefined && previous.added_at !== null) {
+    if (!preferIncomingAddedAt && previous.added_at !== undefined && previous.added_at !== null) {
       song.added_at = previous.added_at
-    } else if (song.added_at === undefined || song.added_at === null) song.added_at = now
+    } else if (song.added_at === undefined || song.added_at === null) {
+      song.added_at =
+        previous.added_at !== undefined && previous.added_at !== null ? previous.added_at : now
+    }
     if (songContentKey(previous) !== songContentKey(song)) {
       song.updated_at = now
       updated += 1
