@@ -22,6 +22,7 @@ declare module 'vue' {
     ElPagination: typeof import('element-plus/es')['ElPagination']
     ElSelect: typeof import('element-plus/es')['ElSelect']
     ElTag: typeof import('element-plus/es')['ElTag']
+    ElTooltip: typeof import('element-plus/es')['ElTooltip']
     Loading: typeof import('@element-plus/icons-vue')['Loading']
     Moon: typeof import('@element-plus/icons-vue')['Moon']
     Sunny: typeof import('@element-plus/icons-vue')['Sunny']

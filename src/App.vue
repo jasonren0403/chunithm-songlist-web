@@ -5,9 +5,11 @@ import zhCn from "element-plus/es/locale/lang/zh-cn"
 import {
   CATALOG_REGIONS,
   DIFFICULTIES,
+  REGION_CONFIG,
   getCoverCandidates,
   hasDifficulty,
   loadCatalogs,
+  type CatalogLastAddedAt,
   type DifficultyKey,
   type Region,
   type Song,
@@ -38,6 +40,7 @@ const theme = computed<Theme>(
   () => manualTheme.value ?? (systemPrefersDark.value ? "dark" : "light"),
 )
 const songs = ref<Song[]>([])
+const lastAddedAt = ref<CatalogLastAddedAt | null>(null)
 const isLoading = ref(true)
 const errorMessage = ref("")
 const keyword = ref("")
@@ -103,7 +106,9 @@ async function refreshCatalog(): Promise<void> {
   errorMessage.value = ""
 
   try {
-    songs.value = await loadCatalogs(controller.signal)
+    const catalogData = await loadCatalogs(controller.signal)
+    songs.value = catalogData.songs
+    lastAddedAt.value = catalogData.lastAddedAt
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") return
     const message = error instanceof Error ? error.message : "发生未知错误"
@@ -156,6 +161,18 @@ function hasStandardLevels(song: Song, region: Region): boolean {
   return Object.values(song.regions[region]?.levels ?? {}).some(Boolean)
 }
 
+function formatSongAddedAt(timestamp: number): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "Asia/Shanghai",
+  }).format(timestamp)
+}
+
 onMounted(() => {
   systemThemeQuery.addEventListener("change", handleSystemThemeChange)
   void refreshCatalog()
@@ -195,7 +212,30 @@ onUnmounted(() => {
             <el-icon><Sunny v-if="theme === 'dark'" /><Moon v-else /></el-icon>
             {{ theme === "dark" ? "亮色模式" : "暗色模式" }}
           </el-button>
-          <div class="live-mark"><i></i> 官方曲库同步</div>
+          <el-tooltip placement="bottom" effect="dark" :trigger="['hover', 'focus']">
+            <template #content>
+              <div v-if="lastAddedAt" class="sync-time-tooltip">
+                <strong>最近新增歌曲</strong>
+                <div v-for="region in regions" :key="region">
+                  <span>{{ REGION_CONFIG[region].label }}</span>
+                  <template v-if="lastAddedAt[region] !== null">
+                    <time :datetime="new Date(lastAddedAt[region]!).toISOString()">
+                      {{ formatSongAddedAt(lastAddedAt[region]!) }} UTC+8
+                    </time>
+                  </template>
+                  <span v-else>暂无记录</span>
+                </div>
+              </div>
+              <span v-else>正在加载曲库数据…</span>
+            </template>
+            <div
+              class="live-mark"
+              tabindex="0"
+              aria-label="官方曲库同步，悬停或聚焦查看三个区服最近新增歌曲的时间"
+            >
+              <i aria-hidden="true"></i> 官方曲库同步
+            </div>
+          </el-tooltip>
         </div>
       </header>
 
@@ -297,13 +337,6 @@ onUnmounted(() => {
                 <el-tag class="category-tag" effect="plain" size="small">{{
                   song.category
                 }}</el-tag>
-                <span class="song-id">
-                  <template v-for="region in regions" :key="region">
-                    <span v-if="song.regions[region]">
-                      {{ region }} {{ song.regions[region]?.id }}
-                    </span>
-                  </template>
-                </span>
               </div>
               <h3 :title="song.title">{{ song.title }}</h3>
               <p class="artist">{{ song.artist || "曲师信息暂无" }}</p>

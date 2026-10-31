@@ -28,6 +28,7 @@ export type CoverRegion = (typeof COVER_REGIONS)[number]
 export type DifficultyKey = (typeof DIFFICULTIES)[number]["key"]
 export type DifficultyLevels = Record<DifficultyKey, string>
 export type RegionSongs = Partial<Record<CoverRegion, RegionalSong>>
+export type CatalogLastAddedAt = Record<Region, number | null>
 
 export interface RegionalSong {
   id: string
@@ -64,6 +65,7 @@ interface RawSong {
   lev_ult: string
   we_kanji: string
   we_star: string
+  added_at?: number
   world_end?: Array<{ kanji: string; star: string }>
   level_updated_at?: Record<string, number>
 }
@@ -116,7 +118,10 @@ function isRawSong(value: unknown): value is RawSong {
       song.level_updated_at !== null &&
       !Array.isArray(song.level_updated_at) &&
       Object.values(song.level_updated_at).every((date) => typeof date === "number"))
-  return hasRequiredFields && hasValidWorldEnd && hasValidLevelDates
+  const hasValidAddedAt =
+    song.added_at === undefined ||
+    (typeof song.added_at === "number" && Number.isFinite(song.added_at))
+  return hasRequiredFields && hasValidWorldEnd && hasValidLevelDates && hasValidAddedAt
 }
 
 function toRegionalSong(song: RawSong): RegionalSong {
@@ -137,7 +142,10 @@ function toRegionalSong(song: RawSong): RegionalSong {
   }
 }
 
-function parseCatalog(payload: unknown, region: Region): Song[] {
+function parseCatalog(
+  payload: unknown,
+  region: Region,
+): { songs: Song[]; lastAddedAt: number | null } {
   if (!Array.isArray(payload) || !payload.every(isRawSong)) {
     throw new Error(`${REGION_CONFIG[region].label}曲库数据格式异常`)
   }
@@ -164,10 +172,20 @@ function parseCatalog(payload: unknown, region: Region): Song[] {
     })
   }
 
-  return [...songs.values()]
+  const addedAtTimes = payload.flatMap((song) =>
+    song.added_at === undefined ? [] : [song.added_at],
+  )
+
+  return {
+    songs: [...songs.values()],
+    lastAddedAt: addedAtTimes.length ? Math.max(...addedAtTimes) : null,
+  }
 }
 
-async function fetchCatalog(region: Region, signal: AbortSignal): Promise<Song[]> {
+async function fetchCatalog(
+  region: Region,
+  signal: AbortSignal,
+): Promise<{ songs: Song[]; lastAddedAt: number | null }> {
   const response = await fetch(FEEDS[region], { signal })
   if (!response.ok) {
     throw new Error(`${REGION_CONFIG[region].label}曲库请求失败（HTTP ${response.status}）`)
@@ -176,13 +194,17 @@ async function fetchCatalog(region: Region, signal: AbortSignal): Promise<Song[]
   return parseCatalog(await response.json(), region)
 }
 
-export async function loadCatalogs(signal: AbortSignal): Promise<Song[]> {
+export async function loadCatalogs(
+  signal: AbortSignal,
+): Promise<{ songs: Song[]; lastAddedAt: CatalogLastAddedAt }> {
   const catalogs = await Promise.all(CATALOG_REGIONS.map((region) => fetchCatalog(region, signal)))
   const songs = new Map<string, Song>()
+  const lastAddedAt: CatalogLastAddedAt = { JPN: null, EXP: null, CHN: null }
 
   catalogs.forEach((catalog, index) => {
     const region = CATALOG_REGIONS[index]
-    for (const song of catalog) {
+    lastAddedAt[region] = catalog.lastAddedAt
+    for (const song of catalog.songs) {
       const existing = songs.get(song.key)
       if (!existing) {
         songs.set(song.key, song)
@@ -196,7 +218,7 @@ export async function loadCatalogs(signal: AbortSignal): Promise<Song[]> {
     }
   })
 
-  return [...songs.values()]
+  return { songs: [...songs.values()], lastAddedAt }
 }
 
 export function hasDifficulty(song: Song, difficulty: DifficultyKey): boolean {

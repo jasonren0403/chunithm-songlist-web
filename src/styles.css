@@ -162,7 +162,6 @@ input {
 .eyebrow,
 .section-kicker,
 .live-mark,
-.song-id,
 .region-code,
 .difficulty-chip b,
 .site-footer {
@@ -267,6 +266,18 @@ input {
 .live-mark i {
   width: 6px;
   height: 6px;
+}
+
+.sync-time-tooltip {
+  display: grid;
+  min-width: 190px;
+  gap: 8px;
+}
+
+.sync-time-tooltip > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .catalog-area {
@@ -543,18 +554,6 @@ input {
 .category-tag .el-tag__content {
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.song-id {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5em;
-  color: var(--text-muted);
-}
-
-.song-id > span {
-  white-space: nowrap;
 }
 
 .song-content h3 {
