@@ -37,6 +37,12 @@ export interface RegionalSong {
   worldEnd: WorldEndChart[]
 }
 
+export interface RegionalSongHistory {
+  id: string
+  addedAt: number | null
+  removedAt: number | null
+}
+
 export interface WorldEndChart {
   kanji: string
   stars: string
@@ -49,6 +55,7 @@ export interface Song {
   artist: string
   category: string
   regions: RegionSongs
+  regionHistory: Partial<Record<Region, RegionalSongHistory>>
 }
 
 interface RawSong {
@@ -66,6 +73,7 @@ interface RawSong {
   we_kanji: string
   we_star: string
   added_at?: number
+  removed_at?: number
   world_end?: Array<{ kanji: string; star: string }>
   level_updated_at?: Record<string, number>
 }
@@ -74,6 +82,12 @@ const FEEDS: Record<Region, string> = {
   JPN: `${import.meta.env.BASE_URL}data/catalog-jpn.json`,
   EXP: `${import.meta.env.BASE_URL}data/catalog-exp.json`,
   CHN: `${import.meta.env.BASE_URL}data/catalog-chn.json`,
+}
+
+const REMOVED_FEEDS: Record<Region, string> = {
+  JPN: `${import.meta.env.BASE_URL}data/removed-jpn.json`,
+  EXP: `${import.meta.env.BASE_URL}data/removed-exp.json`,
+  CHN: `${import.meta.env.BASE_URL}data/removed-chn.json`,
 }
 
 export function normalizeTitle(title: string): string {
@@ -121,7 +135,37 @@ function isRawSong(value: unknown): value is RawSong {
   const hasValidAddedAt =
     song.added_at === undefined ||
     (typeof song.added_at === "number" && Number.isFinite(song.added_at))
-  return hasRequiredFields && hasValidWorldEnd && hasValidLevelDates && hasValidAddedAt
+  const hasValidRemovedAt =
+    song.removed_at === undefined ||
+    (typeof song.removed_at === "number" && Number.isFinite(song.removed_at))
+  return (
+    hasRequiredFields &&
+    hasValidWorldEnd &&
+    hasValidLevelDates &&
+    hasValidAddedAt &&
+    hasValidRemovedAt
+  )
+}
+
+function mergeRegionalHistory(
+  existing: RegionalSongHistory | undefined,
+  incoming: RegionalSongHistory,
+): RegionalSongHistory {
+  if (!existing) return incoming
+
+  const addedAtTimes = [existing.addedAt, incoming.addedAt].filter(
+    (timestamp): timestamp is number => timestamp !== null,
+  )
+  return {
+    id: incoming.id || existing.id,
+    addedAt: addedAtTimes.length ? Math.min(...addedAtTimes) : null,
+    removedAt:
+      existing.removedAt === null
+        ? incoming.removedAt
+        : incoming.removedAt === null
+          ? existing.removedAt
+          : Math.max(existing.removedAt, incoming.removedAt),
+  }
 }
 
 function toRegionalSong(song: RawSong): RegionalSong {
@@ -154,9 +198,18 @@ function parseCatalog(
   for (const rawSong of payload) {
     const key = normalizeTitle(rawSong.title)
     const regionalSong = toRegionalSong(rawSong)
+    const regionalHistory: RegionalSongHistory = {
+      id: rawSong.id,
+      addedAt: rawSong.added_at ?? null,
+      removedAt: null,
+    }
     const existing = songs.get(key)
     if (existing) {
       existing.regions[region] = mergeRegionalSongs(existing.regions[region], regionalSong)
+      existing.regionHistory[region] = mergeRegionalHistory(
+        existing.regionHistory[region],
+        regionalHistory,
+      )
       continue
     }
 
@@ -168,6 +221,9 @@ function parseCatalog(
       category: rawSong.catname,
       regions: {
         [region]: regionalSong,
+      },
+      regionHistory: {
+        [region]: regionalHistory,
       },
     })
   }
@@ -194,15 +250,41 @@ async function fetchCatalog(
   return parseCatalog(await response.json(), region)
 }
 
+async function fetchRemovedCatalog(region: Region, signal: AbortSignal): Promise<RawSong[]> {
+  const response = await fetch(REMOVED_FEEDS[region], { signal })
+  if (response.status === 404) return []
+  if (!response.ok) {
+    throw new Error(`${REGION_CONFIG[region].label}下架曲目数据请求失败（HTTP ${response.status}）`)
+  }
+
+  const payload: unknown = await response.json()
+  if (
+    !Array.isArray(payload) ||
+    !payload.every((song) => isRawSong(song) && typeof song.removed_at === "number")
+  ) {
+    throw new Error(`${REGION_CONFIG[region].label}下架曲目数据格式异常`)
+  }
+
+  return payload
+}
+
 export async function loadCatalogs(
   signal: AbortSignal,
 ): Promise<{ songs: Song[]; lastAddedAt: CatalogLastAddedAt }> {
-  const catalogs = await Promise.all(CATALOG_REGIONS.map((region) => fetchCatalog(region, signal)))
+  const catalogs = await Promise.all(
+    CATALOG_REGIONS.map(async (region) => {
+      const [catalog, removedSongs] = await Promise.all([
+        fetchCatalog(region, signal),
+        fetchRemovedCatalog(region, signal),
+      ])
+      return { songs: catalog.songs, lastAddedAt: catalog.lastAddedAt, region, removedSongs }
+    }),
+  )
   const songs = new Map<string, Song>()
   const lastAddedAt: CatalogLastAddedAt = { JPN: null, EXP: null, CHN: null }
 
-  catalogs.forEach((catalog, index) => {
-    const region = CATALOG_REGIONS[index]
+  catalogs.forEach((catalog) => {
+    const { region } = catalog
     lastAddedAt[region] = catalog.lastAddedAt
     for (const song of catalog.songs) {
       const existing = songs.get(song.key)
@@ -214,7 +296,28 @@ export async function loadCatalogs(
       const regionalSong = song.regions[region]
       if (regionalSong) {
         existing.regions[region] = mergeRegionalSongs(existing.regions[region], regionalSong)
+        const regionalHistory = song.regionHistory[region]
+        if (regionalHistory) {
+          existing.regionHistory[region] = mergeRegionalHistory(
+            existing.regionHistory[region],
+            regionalHistory,
+          )
+        }
       }
+    }
+  })
+
+  catalogs.forEach((catalog) => {
+    const { region } = catalog
+    for (const removedSong of catalog.removedSongs) {
+      const song = songs.get(normalizeTitle(removedSong.title))
+      if (!song || song.regions[region]) continue
+
+      song.regionHistory[region] = mergeRegionalHistory(song.regionHistory[region], {
+        id: removedSong.id,
+        addedAt: removedSong.added_at ?? null,
+        removedAt: removedSong.removed_at ?? null,
+      })
     }
   })
 

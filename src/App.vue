@@ -51,6 +51,9 @@ const regionStates = ref<Record<Region, RegionState>>(emptyRegionStates())
 const currentPage = ref(1)
 const pageSize = ref(24)
 const failedCovers = ref(new Map<string, Set<string>>())
+const detailDialogVisible = ref(false)
+const selectedSong = ref<Song | null>(null)
+const selectedCoverRegion = ref<Region | null>(null)
 const regions: readonly Region[] = CATALOG_REGIONS
 let requestController: AbortController | undefined
 
@@ -182,6 +185,48 @@ function currentCover(song: Song): string | undefined {
   return getCoverCandidates(song).find((image) => !failed?.has(image))
 }
 
+const detailCovers = computed(() => {
+  const song = selectedSong.value
+  if (!song) return []
+
+  return regions.flatMap((region) => {
+    const image = song.regions[region]?.image
+    return image ? [{ region, image }] : []
+  })
+})
+
+const hasDifferentDetailCovers = computed(
+  () => new Set(detailCovers.value.map(({ image }) => image)).size > 1,
+)
+
+const currentDetailCover = computed(() => {
+  const song = selectedSong.value
+  if (!song) return undefined
+
+  const failed = failedCovers.value.get(song.key)
+  return (
+    detailCovers.value.find(
+      ({ region, image }) => region === selectedCoverRegion.value && !failed?.has(image),
+    ) ?? detailCovers.value.find(({ image }) => !failed?.has(image))
+  )
+})
+
+function openSongDetails(song: Song): void {
+  selectedSong.value = song
+  selectedCoverRegion.value = regions.find((region) => Boolean(song.regions[region]?.image)) ?? null
+  detailDialogVisible.value = true
+}
+
+function handleDetailCoverError(cover: { region: Region; image: string } | undefined): void {
+  if (!cover || !selectedSong.value) return
+  handleCoverError(selectedSong.value.key, cover.image)
+  if (selectedCoverRegion.value !== cover.region) return
+
+  const failed = failedCovers.value.get(selectedSong.value.key)
+  selectedCoverRegion.value =
+    detailCovers.value.find(({ image }) => !failed?.has(image))?.region ?? null
+}
+
 function hasStandardLevels(song: Song, region: Region): boolean {
   return Object.values(song.regions[region]?.levels ?? {}).some(Boolean)
 }
@@ -196,6 +241,16 @@ function formatSongAddedAt(timestamp: number): string {
     hourCycle: "h23",
     timeZone: "Asia/Shanghai",
   }).format(timestamp)
+}
+
+function formatRegionalDate(timestamp: number | null | undefined, ongoing = false): string {
+  if (ongoing) return "至今"
+  return typeof timestamp === "number" ? `${formatSongAddedAt(timestamp)} UTC+8` : "暂无记录"
+}
+
+function regionalStatus(song: Song, region: Region): string {
+  if (song.regions[region]) return "收录中"
+  return typeof song.regionHistory[region]?.removedAt === "number" ? "已下架" : "未收录"
 }
 
 onMounted(() => {
@@ -346,6 +401,12 @@ onUnmounted(() => {
             v-for="song in pagedSongs"
             :key="song.key"
             class="song-card"
+            role="button"
+            tabindex="0"
+            :aria-label="`查看《${song.title}》的详细信息`"
+            @click="openSongDetails(song)"
+            @keydown.enter="openSongDetails(song)"
+            @keydown.space.prevent="openSongDetails(song)"
             @mouseenter="startCardMarquees"
             @mouseleave="stopCardMarquees"
           >
@@ -456,6 +517,123 @@ onUnmounted(() => {
           />
         </div>
       </section>
+
+      <el-dialog
+        v-model="detailDialogVisible"
+        :title="selectedSong?.title ?? '曲目信息'"
+        width="min(900px, calc(100vw - 32px))"
+        class="song-detail-dialog"
+      >
+        <div v-if="selectedSong" class="song-detail">
+          <div class="song-detail-cover-panel">
+            <div class="song-detail-cover">
+              <img
+                v-if="currentDetailCover"
+                :src="currentDetailCover.image"
+                :alt="`${selectedSong.title} 曲绘`"
+                @error="handleDetailCoverError(currentDetailCover)"
+              />
+              <div v-else class="cover-placeholder">
+                <span>CHUNITHM</span>
+                <strong>{{ selectedSong.title.slice(0, 1) }}</strong>
+              </div>
+            </div>
+            <div
+              v-if="hasDifferentDetailCovers"
+              class="detail-cover-selector"
+              aria-label="切换曲绘区服"
+            >
+              <el-button
+                v-for="cover in detailCovers"
+                :key="cover.region"
+                size="small"
+                :type="selectedCoverRegion === cover.region ? 'primary' : 'default'"
+                :aria-pressed="selectedCoverRegion === cover.region"
+                @click="selectedCoverRegion = cover.region"
+              >
+                {{ cover.region }}
+              </el-button>
+            </div>
+          </div>
+
+          <div class="song-detail-content">
+            <div class="song-detail-metadata">
+              <el-tag class="category-tag" effect="plain" size="small">
+                {{ selectedSong.category || "分类暂无" }}
+              </el-tag>
+              <p>
+                <strong>曲名读音</strong><span>{{ selectedSong.reading || "暂无记录" }}</span>
+              </p>
+              <p>
+                <strong>曲师</strong><span>{{ selectedSong.artist || "暂无记录" }}</span>
+              </p>
+            </div>
+
+            <section
+              v-for="region in regions"
+              :key="region"
+              class="region-detail"
+              :aria-label="`${REGION_CONFIG[region].label}曲目信息`"
+            >
+              <div class="region-detail-heading">
+                <h3>
+                  {{ region }} <span>{{ REGION_CONFIG[region].label }}</span>
+                </h3>
+                <el-tag
+                  :type="selectedSong.regions[region] ? 'success' : 'info'"
+                  effect="plain"
+                  size="small"
+                >
+                  {{ regionalStatus(selectedSong, region) }}
+                </el-tag>
+              </div>
+              <dl class="region-song-meta">
+                <div>
+                  <dt>区服 ID</dt>
+                  <dd>{{ selectedSong.regionHistory[region]?.id ?? "暂无记录" }}</dd>
+                </div>
+                <div>
+                  <dt>收录起始</dt>
+                  <dd>{{ formatRegionalDate(selectedSong.regionHistory[region]?.addedAt) }}</dd>
+                </div>
+                <div>
+                  <dt>收录结束</dt>
+                  <dd>
+                    {{
+                      formatRegionalDate(
+                        selectedSong.regionHistory[region]?.removedAt,
+                        Boolean(selectedSong.regions[region]),
+                      )
+                    }}
+                  </dd>
+                </div>
+              </dl>
+              <div class="detail-difficulties" aria-label="谱面等级">
+                <span
+                  v-for="item in DIFFICULTIES"
+                  :key="item.key"
+                  class="difficulty-chip"
+                  :class="`difficulty-${item.key}`"
+                  :title="item.label"
+                >
+                  <b>{{ item.shortLabel }}</b>
+                  {{ selectedSong.regions[region]?.levels[item.key] || "—" }}
+                </span>
+                <span
+                  v-for="(chart, index) in selectedSong.regions[region]?.worldEnd ?? []"
+                  :key="`${chart.kanji}-${chart.stars}-${index}`"
+                  class="world-end-chip"
+                  :title="`WORLD'S END ${chart.kanji} · ${chart.stars} 星`"
+                >
+                  <b>WORLD'S END</b>
+                  <span class="world-end-kanji">{{ chart.kanji }}</span>
+                  <span class="world-end-stars">★ {{ chart.stars }}</span>
+                </span>
+              </div>
+            </section>
+          </div>
+        </div>
+      </el-dialog>
 
       <footer class="site-footer">
         <span>CHUNITHM SONG ATLAS</span>
