@@ -586,6 +586,8 @@ input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  --marquee-distance: 0px;
+  --marquee-duration: 3s;
 }
 
 .song-detail-dialog-title-text.is-marquee-measuring {
@@ -823,6 +825,8 @@ input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  --marquee-distance: 0px;
+  --marquee-duration: 3s;
 }
 
 .marquee-text.is-marquee-active {

@@ -472,7 +472,7 @@ onUnmounted(() => {
         </el-empty>
 
         <section v-else-if="!errorMessage" class="song-grid" aria-label="曲目列表">
-          <article
+          <div
             v-for="song in pagedSongs"
             :key="song.key"
             class="song-card"
@@ -576,7 +576,7 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
-          </article>
+          </div>
         </section>
 
         <div v-if="!isLoading && !errorMessage && filteredSongs.length > 0" class="pagination-wrap">
