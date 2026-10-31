@@ -576,6 +576,39 @@ input {
   white-space: nowrap;
 }
 
+.marquee-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.marquee-text.is-marquee-active {
+  width: max-content;
+  overflow: visible;
+  animation: card-marquee var(--marquee-duration) ease-in-out infinite alternate;
+}
+
+@keyframes card-marquee {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+
+  88%,
+  100% {
+    transform: translateX(calc(-1 * var(--marquee-distance)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-text.is-marquee-active {
+    width: auto;
+    overflow: hidden;
+    animation: none;
+  }
+}
+
 .availability {
   display: flex;
   flex-wrap: wrap;

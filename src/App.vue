@@ -152,6 +152,31 @@ function handleCoverError(key: string, image?: string): void {
   failedCovers.value = new Map(failedCovers.value).set(key, failed)
 }
 
+function startCardMarquees(event: MouseEvent): void {
+  const card = event.currentTarget
+  if (!(card instanceof HTMLElement)) return
+
+  for (const text of card.querySelectorAll<HTMLElement>(".marquee-text")) {
+    const distance = text.scrollWidth - text.clientWidth
+    if (distance <= 1) continue
+
+    text.style.setProperty("--marquee-distance", `${distance}px`)
+    text.style.setProperty("--marquee-duration", `${Math.max(3, distance / 35)}s`)
+    text.classList.add("is-marquee-active")
+  }
+}
+
+function stopCardMarquees(event: MouseEvent): void {
+  const card = event.currentTarget
+  if (!(card instanceof HTMLElement)) return
+
+  for (const text of card.querySelectorAll<HTMLElement>(".marquee-text")) {
+    text.classList.remove("is-marquee-active")
+    text.style.removeProperty("--marquee-distance")
+    text.style.removeProperty("--marquee-duration")
+  }
+}
+
 function currentCover(song: Song): string | undefined {
   const failed = failedCovers.value.get(song.key)
   return getCoverCandidates(song).find((image) => !failed?.has(image))
@@ -317,7 +342,13 @@ onUnmounted(() => {
         </el-empty>
 
         <section v-else-if="!errorMessage" class="song-grid" aria-label="曲目列表">
-          <article v-for="song in pagedSongs" :key="song.key" class="song-card">
+          <article
+            v-for="song in pagedSongs"
+            :key="song.key"
+            class="song-card"
+            @mouseenter="startCardMarquees"
+            @mouseleave="stopCardMarquees"
+          >
             <div class="cover-wrap">
               <img
                 v-if="currentCover(song)"
@@ -338,8 +369,12 @@ onUnmounted(() => {
                   song.category
                 }}</el-tag>
               </div>
-              <h3 :title="song.title">{{ song.title }}</h3>
-              <p class="artist">{{ song.artist || "曲师信息暂无" }}</p>
+              <h3 :title="song.title">
+                <span class="marquee-text">{{ song.title }}</span>
+              </h3>
+              <p class="artist" :title="song.artist || '曲师信息暂无'">
+                <span class="marquee-text">{{ song.artist || "曲师信息暂无" }}</span>
+              </p>
 
               <div class="availability" aria-label="各区服收录状态">
                 <el-tag
