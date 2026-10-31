@@ -12,16 +12,14 @@ function releaseTimestamp(releaseDate) {
   return Number.isFinite(timestamp) ? canonicalChangeTimestamp(timestamp) : undefined
 }
 
-function withAddedAt(row, releaseDate, fallbackReleaseDate) {
-  const addedAt = releaseTimestamp(releaseDate) ?? releaseTimestamp(fallbackReleaseDate)
-  return addedAt === undefined ? row : { ...row, added_at: addedAt }
+function worldEndDateKey(kanji, star) {
+  return `we:${kanji}|${star}`
 }
 
 /**
  * 将 lxns 的单条曲目转换为与 SEGA music.json 同构的行。
  *
- * WORLD'S END 谱面按 SEGA 官方曲库的惯例拆成独立行（等级字段为空，
- * 仅携带 we_kanji / we_star）；ULTIMA 也拆成独立行，以保留各自的收录日期。
+ * 每首歌只输出一行；各谱面的更新时间保存在 level_updated_at 中。
  * CHN 行不携带封面（image 为空字符串）：国服曲库目前是 JPN/EXP 的子集，
  * 页面按 JPN、EXP、CHN 顺序回退封面，无需重复下载 lxns 图床资源。
  *
@@ -43,19 +41,24 @@ function withAddedAt(row, releaseDate, fallbackReleaseDate) {
  */
 export function lxnsSongToRawSongs(song) {
   const levels = emptyLevels()
-  const standardLevels = emptyLevels()
   const worldEndCharts = []
-  const standardCharts = []
-  let ultimaChart
+  const levelUpdatedAt = {}
 
   for (const chart of song.difficulties ?? []) {
     if (chart.difficulty >= 0 && chart.difficulty < STANDARD_LEVEL_KEYS.length) {
-      standardCharts.push(chart)
-      standardLevels[LEVEL_KEYS[chart.difficulty]] = String(chart.level ?? "")
+      levels[LEVEL_KEYS[chart.difficulty]] = String(chart.level ?? "")
+      const updatedAt = releaseTimestamp(song.release_date)
+      if (updatedAt !== undefined) levelUpdatedAt[LEVEL_KEYS[chart.difficulty]] = updatedAt
     } else if (chart.difficulty === 4) {
-      ultimaChart = chart
+      levels.lev_ult = String(chart.level ?? "")
+      const updatedAt = releaseTimestamp(chart.release_date) ?? releaseTimestamp(song.release_date)
+      if (updatedAt !== undefined) levelUpdatedAt.lev_ult = updatedAt
     } else if (chart.difficulty === 5) {
       worldEndCharts.push(chart)
+      const kanji = String(chart.kanji ?? "")
+      const star = String(chart.star ?? "")
+      const updatedAt = releaseTimestamp(chart.release_date) ?? releaseTimestamp(song.release_date)
+      if (updatedAt !== undefined) levelUpdatedAt[worldEndDateKey(kanji, star)] = updatedAt
     }
   }
 
@@ -69,51 +72,19 @@ export function lxnsSongToRawSongs(song) {
     image: "",
   }
 
-  const rows = []
-  if (standardCharts.length > 0 || (!ultimaChart && worldEndCharts.length === 0)) {
-    rows.push(
-      withAddedAt(
-        {
-          ...base,
-          ...standardLevels,
-          we_kanji: "",
-          we_star: "",
-        },
-        song.release_date,
-      ),
-    )
-  }
-  if (ultimaChart) {
-    rows.push(
-      withAddedAt(
-        {
-          ...base,
-          ...levels,
-          lev_ult: String(ultimaChart.level ?? ""),
-          we_kanji: "",
-          we_star: "",
-        },
-        ultimaChart.release_date,
-        song.release_date,
-      ),
-    )
-  }
-  for (const chart of worldEndCharts) {
-    rows.push(
-      withAddedAt(
-        {
-          ...base,
-          ...emptyLevels(),
-          we_kanji: String(chart.kanji ?? ""),
-          we_star: String(chart.star ?? ""),
-        },
-        chart.release_date,
-        song.release_date,
-      ),
-    )
-  }
-
-  return rows
+  return [
+    {
+      ...base,
+      ...levels,
+      we_kanji: "",
+      we_star: "",
+      world_end: worldEndCharts.map((chart) => ({
+        kanji: String(chart.kanji ?? ""),
+        star: String(chart.star ?? ""),
+      })),
+      level_updated_at: levelUpdatedAt,
+    },
+  ]
 }
 
 /**

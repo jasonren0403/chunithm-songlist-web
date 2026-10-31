@@ -84,18 +84,23 @@ test("新条目获得 added_at，已有条目原样保留", () => {
   assert.equal(catalog[0].updated_at, undefined)
 })
 
-test("LXNS release date replaces a previously tracked added_at", () => {
-  const previousCatalog = [{ id: "1", title: "Test", added_at: 100 }]
-  const catalog = [{ id: "1", title: "Test", added_at: 200 }]
+test("LXNS release dates are stored per chart without changing added_at", () => {
+  const previousCatalog = [
+    { id: "1", title: "Test", lev_bas: "2", added_at: 50, level_updated_at: { lev_bas: 100 } },
+  ]
+  const catalog = [{ id: "1", title: "Test", lev_bas: "2", level_updated_at: { lev_bas: 200 } }]
 
-  applyCatalogChanges({
+  const stats = applyCatalogChanges({
     previousCatalog,
     catalog,
     now: 300,
-    preferIncomingAddedAt: true,
+    mergeById: true,
   })
 
-  assert.equal(catalog[0].added_at, 200)
+  assert.equal(stats.updated, 1)
+  assert.equal(catalog[0].added_at, 50)
+  assert.equal(catalog[0].level_updated_at.lev_bas, 200)
+  assert.equal(catalog[0].updated_at, undefined)
 })
 
 test("内容变化标记 updated_at，newflag 翻转不算变化", () => {

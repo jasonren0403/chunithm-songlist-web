@@ -64,6 +64,8 @@ interface RawSong {
   lev_ult: string
   we_kanji: string
   we_star: string
+  world_end?: Array<{ kanji: string; star: string }>
+  level_updated_at?: Record<string, number>
 }
 
 const FEEDS: Record<Region, string> = {
@@ -87,7 +89,7 @@ function isRawSong(value: unknown): value is RawSong {
   if (typeof value !== "object" || value === null) return false
 
   const song = value as Record<string, unknown>
-  return [
+  const hasRequiredFields = [
     "id",
     "title",
     "reading",
@@ -98,6 +100,23 @@ function isRawSong(value: unknown): value is RawSong {
     "we_kanji",
     "we_star",
   ].every((field) => typeof song[field] === "string")
+  const hasValidWorldEnd =
+    song.world_end === undefined ||
+    (Array.isArray(song.world_end) &&
+      song.world_end.every(
+        (chart) =>
+          typeof chart === "object" &&
+          chart !== null &&
+          typeof chart.kanji === "string" &&
+          typeof chart.star === "string",
+      ))
+  const hasValidLevelDates =
+    song.level_updated_at === undefined ||
+    (typeof song.level_updated_at === "object" &&
+      song.level_updated_at !== null &&
+      !Array.isArray(song.level_updated_at) &&
+      Object.values(song.level_updated_at).every((date) => typeof date === "number"))
+  return hasRequiredFields && hasValidWorldEnd && hasValidLevelDates
 }
 
 function toRegionalSong(song: RawSong): RegionalSong {
@@ -111,7 +130,10 @@ function toRegionalSong(song: RawSong): RegionalSong {
       lev_mas: song.lev_mas,
       lev_ult: song.lev_ult,
     },
-    worldEnd: song.we_kanji || song.we_star ? [{ kanji: song.we_kanji, stars: song.we_star }] : [],
+    worldEnd: [
+      ...(song.world_end ?? []).map(({ kanji, star }) => ({ kanji, stars: star })),
+      ...(song.we_kanji || song.we_star ? [{ kanji: song.we_kanji, stars: song.we_star }] : []),
+    ],
   }
 }
 

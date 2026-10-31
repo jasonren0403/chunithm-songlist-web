@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { lxnsSongToRawSongs, parseLxnsCatalog } from "./lxns-catalog.mjs"
 
-test("常规曲目与 ULTIMA 谱面分别转换为独立行", () => {
+test("一个曲目只输出一行并包含全部难度", () => {
   const rows = lxnsSongToRawSongs({
     id: 3,
     title: "B.B.K.K.B.K.K.",
@@ -17,7 +17,7 @@ test("常规曲目与 ULTIMA 谱面分别转换为独立行", () => {
     ],
   })
 
-  assert.equal(rows.length, 2)
+  assert.equal(rows.length, 1)
   assert.deepEqual(rows[0], {
     id: "3",
     catname: "其他游戏",
@@ -30,12 +30,12 @@ test("常规曲目与 ULTIMA 谱面分别转换为独立行", () => {
     lev_adv: "6",
     lev_exp: "10",
     lev_mas: "12+",
-    lev_ult: "",
+    lev_ult: "13+",
     we_kanji: "",
     we_star: "",
+    world_end: [],
+    level_updated_at: {},
   })
-  assert.equal(rows[1].lev_ult, "13+")
-  assert.equal(rows[1].lev_bas, "")
 })
 
 test("缺失的难度留空字符串", () => {
@@ -56,7 +56,7 @@ test("缺失的难度留空字符串", () => {
   assert.equal(rows[0].lev_ult, "")
 })
 
-test("仅含 WORLD'S END 的条目只输出 WE 行", () => {
+test("仅含 WORLD'S END 的曲目写入独立谱面数组", () => {
   const rows = lxnsSongToRawSongs({
     id: 8020,
     title: "B.B.K.K.B.K.K.",
@@ -66,14 +66,13 @@ test("仅含 WORLD'S END 的条目只输出 WE 行", () => {
   })
 
   assert.equal(rows.length, 1)
-  assert.equal(rows[0].we_kanji, "戻")
-  assert.equal(rows[0].we_star, "4")
+  assert.deepEqual(rows[0].world_end, [{ kanji: "戻", star: "4" }])
   assert.equal(rows[0].lev_bas, "")
   assert.equal(rows[0].lev_mas, "")
   assert.equal(rows[0].image, "")
 })
 
-test("常规谱面与多张 WORLD'S END 谱面共存时逐张拆行", () => {
+test("常规谱面与多张 WORLD'S END 谱面共存时仍只输出一行", () => {
   const rows = lxnsSongToRawSongs({
     id: 100,
     title: "Mixed Song",
@@ -84,16 +83,13 @@ test("常规谱面与多张 WORLD'S END 谱面共存时逐张拆行", () => {
     ],
   })
 
-  assert.equal(rows.length, 3)
+  assert.equal(rows.length, 1)
   assert.equal(rows[0].we_kanji, "")
   assert.equal(rows[0].lev_mas, "13")
-  assert.deepEqual(
-    rows.slice(1).map((row) => [row.we_kanji, row.we_star]),
-    [
-      ["止", "1"],
-      ["狂", "5"],
-    ],
-  )
+  assert.deepEqual(rows[0].world_end, [
+    { kanji: "止", star: "1" },
+    { kanji: "狂", star: "5" },
+  ])
   assert.ok(rows.every((row) => row.id === "100" && row.title === "Mixed Song"))
 })
 
@@ -109,7 +105,29 @@ test("parseLxnsCatalog 展开曲目列表", () => {
 
   assert.equal(rows.length, 2)
   assert.equal(rows[0].lev_bas, "1")
-  assert.equal(rows[1].we_kanji, "光")
+  assert.deepEqual(rows[1].world_end, [{ kanji: "光", star: "3" }])
+})
+
+test("谱面更新时间按难度及 WORLD'S END 图表分别保存", () => {
+  const rows = lxnsSongToRawSongs({
+    id: 101,
+    title: "Timestamped song",
+    release_date: "2020-01-01",
+    difficulties: [
+      { difficulty: 0, level: "3" },
+      { difficulty: 3, level: "12+" },
+      { difficulty: 4, level: "15.0", release_date: "2024-02-03" },
+      { difficulty: 5, kanji: "止", star: 1, release_date: "2025-04-06" },
+    ],
+  })
+
+  assert.equal(rows.length, 1)
+  assert.deepEqual(rows[0].level_updated_at, {
+    lev_bas: Date.parse("2020-01-01T02:00:00.000Z"),
+    lev_mas: Date.parse("2020-01-01T02:00:00.000Z"),
+    lev_ult: Date.parse("2024-02-03T02:00:00.000Z"),
+    "we:止|1": Date.parse("2025-04-06T02:00:00.000Z"),
+  })
 })
 
 test("parseLxnsCatalog 拒绝异常数据", () => {

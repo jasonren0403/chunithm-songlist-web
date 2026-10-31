@@ -343,7 +343,7 @@ for (const result of results) {
     catalog: result.catalog,
     previousRemoved: await readRemovedCatalog(result.region),
     now: changeTimestamp,
-    preferIncomingAddedAt: result.region.source === "lxns",
+    mergeById: true,
   })
   await writeRemovedCatalog(result.region, result.changeStats.removedSongs)
 }

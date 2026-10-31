@@ -2,13 +2,13 @@
 //
 // 字段约定（均为 Unix 毫秒时间戳，number，可用 new Date(value) 还原日期）：
 // - added_at:   该条目首次出现在曲库中的同步时间；缺失表示启用追踪前就已收录
-// - updated_at: 条目内容最近一次发生变化的同步时间
+// - updated_at: 条目内容最近一次发生变化的同步时间；lxns 为各谱面的发行/更新时间
 // - removed_at: 仅存在于下架记录（removed-<region>.json）中，为检测到下架的同步时间
 //
-// 条目身份：同一区服内以 id + WORLD'S END 标记区分行
-// （lxns 转换出的 WE 行可能与原曲共享 id，SEGA 官方 WE 行有独立 id）。
+// 同一区服按 id 合并所有难度行；WORLD'S END 日期用 we:标记|星数区分。
 
-const BOOKKEEPING_FIELDS = ["added_at", "updated_at"]
+const BOOKKEEPING_FIELDS = ["added_at", "updated_at", "level_updated_at"]
+const LEVEL_KEYS = ["lev_bas", "lev_adv", "lev_exp", "lev_mas", "lev_ult"]
 // newflag 是 SEGA 官网的“新曲”角标，会例行翻转，不计入内容变更以避免噪音
 const VOLATILE_FIELDS = ["newflag"]
 
@@ -31,7 +31,7 @@ export function canonicalChangeTimestamp(timeMs) {
 /**
  * 决定本次同步的变更标记基准时间：
  * - SEGA 官方 JSON 内容不含时间信息，取响应头 Last-Modified（文件真实修改时间）所在日
- * - lxns 为动态接口、无任何更新时间可用，取同步检测时刻
+ * - lxns 没有可用的谱面 release_date 时，取同步检测时刻作为回退时间
  * 两者统一归一为当天（UTC+8）10:00；Last-Modified 缺失或无法解析时退回检测时刻。
  *
  * @param {{ source?: string, lastModified?: string | null, syncTime: number }} options
@@ -50,6 +50,81 @@ export function songRowKey(song) {
   return `${song.id}::${song.we_kanji ?? ""}|${song.we_star ?? ""}::${chartType}`
 }
 
+function mergeRowsById(rows) {
+  const songs = new Map()
+  for (const row of rows) {
+    const id = String(row.id)
+    let merged = songs.get(id)
+    if (!merged) {
+      merged = {
+        ...row,
+        world_end: [],
+        level_updated_at: {},
+        we_kanji: "",
+        we_star: "",
+      }
+      songs.set(id, merged)
+    }
+
+    for (const level of LEVEL_KEYS) {
+      if (!merged[level] && row[level]) merged[level] = row[level]
+      if (row[level] && row.updated_at !== undefined && !row.we_kanji && !row.we_star) {
+        merged.level_updated_at[level] = row.updated_at
+      }
+    }
+
+    const worldEndCharts = [...(row.world_end ?? [])]
+    if (row.we_kanji || row.we_star) {
+      worldEndCharts.push({ kanji: row.we_kanji ?? "", star: row.we_star ?? "" })
+      if (row.updated_at !== undefined) {
+        merged.level_updated_at[`we:${row.we_kanji ?? ""}|${row.we_star ?? ""}`] = row.updated_at
+      }
+    }
+    for (const chart of worldEndCharts) {
+      if (
+        !merged.world_end.some(
+          (existing) => existing.kanji === chart.kanji && existing.star === chart.star,
+        )
+      ) {
+        merged.world_end.push(chart)
+      }
+    }
+    Object.assign(merged.level_updated_at, row.level_updated_at ?? {})
+    if (
+      row.added_at !== undefined &&
+      row.added_at !== null &&
+      (merged.added_at === undefined || merged.added_at === null || row.added_at < merged.added_at)
+    ) {
+      merged.added_at = row.added_at
+    }
+  }
+  for (const song of songs.values()) delete song.updated_at
+  return [...songs.values()]
+}
+
+function fillMissingLevelDates(song, previous, fallbackDate) {
+  song.level_updated_at ??= {}
+  const charts = LEVEL_KEYS.filter((level) => song[level]).map((level) => ({
+    key: level,
+    unchanged: previous?.[level] === song[level],
+  }))
+  const previousWorldEndKeys = new Set(
+    (previous?.world_end ?? []).map((chart) => `we:${chart.kanji}|${chart.star}`),
+  )
+  charts.push(
+    ...(song.world_end ?? []).map((chart) => {
+      const key = `we:${chart.kanji}|${chart.star}`
+      return { key, unchanged: previousWorldEndKeys.has(key) }
+    }),
+  )
+  for (const { key, unchanged } of charts) {
+    if (song.level_updated_at[key] !== undefined && song.level_updated_at[key] !== null) continue
+    const previousDate = previous?.level_updated_at?.[key]
+    song.level_updated_at[key] =
+      unchanged && previousDate !== undefined && previousDate !== null ? previousDate : fallbackDate
+  }
+}
+
 export function songContentKey(song) {
   const entries = Object.entries(song)
     .filter(([field]) => !BOOKKEEPING_FIELDS.includes(field) && !VOLATILE_FIELDS.includes(field))
@@ -57,13 +132,19 @@ export function songContentKey(song) {
   return JSON.stringify(entries)
 }
 
+function levelDatesKey(song) {
+  return JSON.stringify(
+    Object.entries(song.level_updated_at ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  )
+}
+
 /**
  * 对比上次曲库与本次抓取结果，就地标记时间戳，并合并下架墓碑列表。
  *
  * @param {object} options
- * @param {Array<Record<string, string>>} options.previousCatalog 上次写入本地的曲库
- * @param {Array<Record<string, string>>} options.catalog 本次抓取的曲库（会被就地标记）
- * @param {Array<Record<string, string>>} [options.previousRemoved] 已有下架记录
+ * @param {Array<Record<string, string | number>>} options.previousCatalog 上次写入本地的曲库
+ * @param {Array<Record<string, string | number>>} options.catalog 本次抓取的曲库（会被就地标记）
+ * @param {Array<Record<string, string | number>>} [options.previousRemoved] 已有下架记录
  * @param {number} options.now 本次同步的 Unix 毫秒时间戳
  * @returns {{
  *   added: number,
@@ -77,36 +158,47 @@ export function applyCatalogChanges({
   catalog,
   previousRemoved = [],
   now,
-  preferIncomingAddedAt = false,
+  mergeById = false,
 }) {
-  const previousByKey = new Map(previousCatalog.map((song) => [songRowKey(song), song]))
-  const removedByKey = new Map(previousRemoved.map((song) => [songRowKey(song), song]))
+  const previousRows = mergeById ? mergeRowsById(previousCatalog) : previousCatalog
+  const removedRows = mergeById ? mergeRowsById(previousRemoved) : previousRemoved
+  const rowKey = mergeById ? (song) => String(song.id) : songRowKey
+  const previousByKey = new Map(previousRows.map((song) => [rowKey(song), song]))
+  const removedByKey = new Map(removedRows.map((song) => [rowKey(song), song]))
+  if (mergeById) {
+    const currentRows = mergeRowsById(catalog)
+    catalog.splice(0, catalog.length, ...currentRows)
+  }
 
   const currentKeys = new Set()
   let added = 0
   let updated = 0
 
   for (const song of catalog) {
-    const key = songRowKey(song)
+    const key = rowKey(song)
     currentKeys.add(key)
 
     const previous = previousByKey.get(key)
     if (!previous) {
       if (song.added_at === undefined || song.added_at === null) song.added_at = now
+      if (mergeById) fillMissingLevelDates(song, undefined, now)
       added += 1
       continue
     }
 
-    if (!preferIncomingAddedAt && previous.added_at !== undefined && previous.added_at !== null) {
+    if (previous.added_at !== undefined && previous.added_at !== null) {
       song.added_at = previous.added_at
     } else if (song.added_at === undefined || song.added_at === null) {
-      song.added_at =
-        previous.added_at !== undefined && previous.added_at !== null ? previous.added_at : now
+      song.added_at = now
     }
-    if (songContentKey(previous) !== songContentKey(song)) {
-      song.updated_at = now
+    if (mergeById) fillMissingLevelDates(song, previous, now)
+    const contentChanged =
+      songContentKey(previous) !== songContentKey(song) ||
+      (mergeById && levelDatesKey(previous) !== levelDatesKey(song))
+    if (contentChanged) {
+      if (!mergeById) song.updated_at = now
       updated += 1
-    } else if (previous.updated_at) {
+    } else if (!mergeById && previous.updated_at) {
       song.updated_at = previous.updated_at
     }
   }
