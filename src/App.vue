@@ -289,6 +289,10 @@ function regionalStatus(song: Song, region: Region): string {
   return typeof song.regionHistory[region]?.removedAt === "number" ? "已下架" : "未收录"
 }
 
+function hasNeverBeenInRegion(song: Song, region: Region): boolean {
+  return !song.regions[region] && typeof song.regionHistory[region]?.removedAt !== "number"
+}
+
 onMounted(() => {
   systemThemeQuery.addEventListener("change", handleSystemThemeChange)
   void refreshCatalog()
@@ -668,7 +672,18 @@ onUnmounted(() => {
                   {{ regionalStatus(selectedSong, region) }}
                 </el-tag>
               </div>
-              <el-timeline class="inclusion-timeline" aria-label="区服收录时间线">
+              <el-timeline
+                v-if="hasNeverBeenInRegion(selectedSong, region)"
+                class="inclusion-timeline"
+                aria-label="区服收录时间线"
+              >
+                <el-timeline-item
+                  timestamp="暂未收录"
+                  color="var(--text-secondary)"
+                  placement="top"
+                />
+              </el-timeline>
+              <el-timeline v-else class="inclusion-timeline" aria-label="区服收录时间线">
                 <el-timeline-item
                   :timestamp="formatRegionalDate(selectedSong.regionHistory[region]?.addedAt)"
                   color="var(--accent-strong)"
@@ -678,15 +693,15 @@ onUnmounted(() => {
                 </el-timeline-item>
                 <el-timeline-item
                   :timestamp="
-                    formatRegionalDate(
-                      selectedSong.regionHistory[region]?.removedAt,
-                      Boolean(selectedSong.regions[region]),
-                    )
+                    selectedSong.regions[region]
+                      ? '仍在收录中'
+                      : formatRegionalDate(selectedSong.regionHistory[region]?.removedAt)
                   "
                   color="var(--text-secondary)"
+                  :hollow="Boolean(selectedSong.regions[region])"
                   placement="top"
                 >
-                  收录结束
+                  {{ selectedSong.regions[region] ? "" : "收录结束" }}
                 </el-timeline-item>
               </el-timeline>
               <div class="detail-difficulties" aria-label="谱面等级">
