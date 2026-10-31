@@ -4,6 +4,7 @@
  *   id: string,
  *   image: string,
  *   levels: Record<'lev_bas' | 'lev_adv' | 'lev_exp' | 'lev_mas' | 'lev_ult', string>,
+ *   levelUpdatedAt: Record<string, number>,
  *   worldEnd: WorldEndChart[]
  * }} RegionalSong
  */
@@ -35,6 +36,10 @@ export function mergeRegionalSongs(existing, incoming) {
       lev_exp: incoming.levels.lev_exp || existing.levels.lev_exp,
       lev_mas: incoming.levels.lev_mas || existing.levels.lev_mas,
       lev_ult: incoming.levels.lev_ult || existing.levels.lev_ult,
+    },
+    levelUpdatedAt: {
+      ...(existing.levelUpdatedAt ?? {}),
+      ...(incoming.levelUpdatedAt ?? {}),
     },
     worldEnd: uniqueWorldEnd,
   }

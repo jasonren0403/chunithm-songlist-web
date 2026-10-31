@@ -34,6 +34,7 @@ export interface RegionalSong {
   id: string
   image: string
   levels: DifficultyLevels
+  levelUpdatedAt: Record<string, number>
   worldEnd: WorldEndChart[]
 }
 
@@ -179,6 +180,7 @@ function toRegionalSong(song: RawSong): RegionalSong {
       lev_mas: song.lev_mas,
       lev_ult: song.lev_ult,
     },
+    levelUpdatedAt: song.level_updated_at ?? {},
     worldEnd: [
       ...(song.world_end ?? []).map(({ kanji, star }) => ({ kanji, stars: star })),
       ...(song.we_kanji || song.we_star ? [{ kanji: song.we_kanji, stars: song.we_star }] : []),

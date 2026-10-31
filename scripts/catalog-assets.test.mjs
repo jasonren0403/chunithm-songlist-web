@@ -45,6 +45,7 @@ test("merge repeated regional rows and retain unique WORLD'S END charts", () => 
         lev_mas: "",
         lev_ult: "",
       },
+      levelUpdatedAt: { lev_bas: 100 },
       worldEnd: [{ kanji: "避", stars: "7" }],
     },
     {
@@ -57,6 +58,7 @@ test("merge repeated regional rows and retain unique WORLD'S END charts", () => 
         lev_mas: "",
         lev_ult: "",
       },
+      levelUpdatedAt: { lev_ult: 200, "we:狂|7": 300 },
       worldEnd: [
         { kanji: "狂", stars: "7" },
         { kanji: "避", stars: "7" },
@@ -66,6 +68,11 @@ test("merge repeated regional rows and retain unique WORLD'S END charts", () => 
 
   assert.equal(merged.id, "3057")
   assert.equal(merged.image, "cover.jpg")
+  assert.deepEqual(merged.levelUpdatedAt, {
+    lev_bas: 100,
+    lev_ult: 200,
+    "we:狂|7": 300,
+  })
   assert.deepEqual(merged.worldEnd, [
     { kanji: "避", stars: "7" },
     { kanji: "狂", stars: "7" },
