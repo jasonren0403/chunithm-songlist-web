@@ -180,6 +180,32 @@ function stopCardMarquees(event: MouseEvent): void {
   }
 }
 
+function startDetailTitleMarquee(): void {
+  const viewport = document.querySelector<HTMLElement>(".song-detail-dialog-title")
+  const text = viewport?.querySelector<HTMLElement>(".song-detail-dialog-title-text")
+  if (!viewport || !text) return
+
+  text.classList.add("is-marquee-measuring")
+  const fullWidth = text.getBoundingClientRect().width
+  text.classList.remove("is-marquee-measuring")
+
+  const distance = fullWidth - viewport.clientWidth
+  if (distance <= 1) return
+
+  text.style.setProperty("--marquee-distance", `${distance}px`)
+  text.style.setProperty("--marquee-duration", `${Math.max(3, distance / 35)}s`)
+  text.classList.add("is-marquee-active")
+}
+
+function stopDetailTitleMarquee(): void {
+  const text = document.querySelector<HTMLElement>(".song-detail-dialog-title-text")
+  if (!text) return
+
+  text.classList.remove("is-marquee-active")
+  text.style.removeProperty("--marquee-distance")
+  text.style.removeProperty("--marquee-duration")
+}
+
 function currentCover(song: Song): string | undefined {
   const failed = failedCovers.value.get(song.key)
   return getCoverCandidates(song).find((image) => !failed?.has(image))
@@ -194,6 +220,10 @@ const detailCovers = computed(() => {
     return image ? [{ region, image }] : []
   })
 })
+
+const includedRegions = computed(() =>
+  regions.filter((region) => Boolean(selectedSong.value?.regions[region])),
+)
 
 const hasDifferentDetailCovers = computed(
   () => new Set(detailCovers.value.map(({ image }) => image)).size > 1,
@@ -246,6 +276,12 @@ function formatSongAddedAt(timestamp: number): string {
 function formatRegionalDate(timestamp: number | null | undefined, ongoing = false): string {
   if (ongoing) return "至今"
   return typeof timestamp === "number" ? `${formatSongAddedAt(timestamp)} UTC+8` : "暂无记录"
+}
+
+function formatChartUpdatedAt(timestamp: number | undefined): string {
+  return typeof timestamp === "number"
+    ? `谱面更新 ${formatRegionalDate(timestamp)}`
+    : "谱面日期暂无记录"
 }
 
 function regionalStatus(song: Song, region: Region): string {
@@ -520,10 +556,27 @@ onUnmounted(() => {
 
       <el-dialog
         v-model="detailDialogVisible"
-        :title="selectedSong?.title ?? '曲目信息'"
         width="min(900px, calc(100vw - 32px))"
         class="song-detail-dialog"
+        @opened="startDetailTitleMarquee"
+        @closed="stopDetailTitleMarquee"
       >
+        <template #header>
+          <div class="song-detail-dialog-heading">
+            <span class="song-detail-dialog-label">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 11v5M12 8h.01" />
+              </svg>
+              详细信息
+            </span>
+            <span class="song-detail-dialog-title">
+              <span class="song-detail-dialog-title-text">
+                {{ selectedSong?.title ?? "" }}
+              </span>
+            </span>
+          </div>
+        </template>
         <div v-if="selectedSong" class="song-detail">
           <div class="song-detail-cover-panel">
             <div class="song-detail-cover">
@@ -561,9 +614,21 @@ onUnmounted(() => {
               <el-tag class="category-tag" effect="plain" size="small">
                 {{ selectedSong.category || "分类暂无" }}
               </el-tag>
-              <p>
-                <strong>曲名读音</strong><span>{{ selectedSong.reading || "暂无记录" }}</span>
-              </p>
+              <div class="song-detail-region-summary">
+                <strong>收录区服</strong>
+                <div>
+                  <el-tag
+                    v-for="region in includedRegions"
+                    :key="region"
+                    :type="region === 'JPN' ? 'success' : region === 'EXP' ? 'warning' : 'danger'"
+                    effect="plain"
+                    size="small"
+                  >
+                    {{ region }}
+                  </el-tag>
+                  <span v-if="includedRegions.length === 0">暂无记录</span>
+                </div>
+              </div>
               <p>
                 <strong>曲师</strong><span>{{ selectedSong.artist || "暂无记录" }}</span>
               </p>
@@ -579,6 +644,22 @@ onUnmounted(() => {
                 <h3>
                   {{ region }} <span>{{ REGION_CONFIG[region].label }}</span>
                 </h3>
+                <span
+                  class="region-song-id"
+                  :aria-label="`曲目 ID ${selectedSong.regionHistory[region]?.id ?? '暂无记录'}`"
+                >
+                  <svg
+                    class="region-song-id-icon"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <circle cx="9" cy="10" r="2" />
+                    <path d="M6 16c.6-1.6 1.6-2.4 3-2.4s2.4.8 3 2.4M15 10h3M15 14h3" />
+                  </svg>
+                  <span>{{ selectedSong.regionHistory[region]?.id ?? "暂无记录" }}</span>
+                </span>
                 <el-tag
                   :type="selectedSong.regions[region] ? 'success' : 'info'"
                   effect="plain"
@@ -587,48 +668,66 @@ onUnmounted(() => {
                   {{ regionalStatus(selectedSong, region) }}
                 </el-tag>
               </div>
-              <dl class="region-song-meta">
-                <div>
-                  <dt>区服 ID</dt>
-                  <dd>{{ selectedSong.regionHistory[region]?.id ?? "暂无记录" }}</dd>
-                </div>
-                <div>
-                  <dt>收录起始</dt>
-                  <dd>{{ formatRegionalDate(selectedSong.regionHistory[region]?.addedAt) }}</dd>
-                </div>
-                <div>
-                  <dt>收录结束</dt>
-                  <dd>
-                    {{
-                      formatRegionalDate(
-                        selectedSong.regionHistory[region]?.removedAt,
-                        Boolean(selectedSong.regions[region]),
-                      )
-                    }}
-                  </dd>
-                </div>
-              </dl>
-              <div class="detail-difficulties" aria-label="谱面等级">
-                <span
-                  v-for="item in DIFFICULTIES"
-                  :key="item.key"
-                  class="difficulty-chip"
-                  :class="`difficulty-${item.key}`"
-                  :title="item.label"
+              <el-timeline class="inclusion-timeline" aria-label="区服收录时间线">
+                <el-timeline-item
+                  :timestamp="formatRegionalDate(selectedSong.regionHistory[region]?.addedAt)"
+                  color="var(--accent-strong)"
+                  placement="top"
                 >
-                  <b>{{ item.shortLabel }}</b>
-                  {{ selectedSong.regions[region]?.levels[item.key] || "—" }}
-                </span>
-                <span
+                  收录起始
+                </el-timeline-item>
+                <el-timeline-item
+                  :timestamp="
+                    formatRegionalDate(
+                      selectedSong.regionHistory[region]?.removedAt,
+                      Boolean(selectedSong.regions[region]),
+                    )
+                  "
+                  color="var(--text-secondary)"
+                  placement="top"
+                >
+                  收录结束
+                </el-timeline-item>
+              </el-timeline>
+              <div class="detail-difficulties" aria-label="谱面等级">
+                <div v-for="item in DIFFICULTIES" :key="item.key" class="chart-detail-entry">
+                  <span
+                    class="difficulty-chip"
+                    :class="`difficulty-${item.key}`"
+                    :title="item.label"
+                  >
+                    <b>{{ item.shortLabel }}</b>
+                    {{ selectedSong.regions[region]?.levels[item.key] || "—" }}
+                  </span>
+                  <small v-if="selectedSong.regions[region]?.levels[item.key]">
+                    {{
+                      formatChartUpdatedAt(selectedSong.regions[region]?.levelUpdatedAt[item.key])
+                    }}
+                  </small>
+                </div>
+                <div
                   v-for="(chart, index) in selectedSong.regions[region]?.worldEnd ?? []"
                   :key="`${chart.kanji}-${chart.stars}-${index}`"
-                  class="world-end-chip"
-                  :title="`WORLD'S END ${chart.kanji} · ${chart.stars} 星`"
+                  class="chart-detail-entry"
                 >
-                  <b>WORLD'S END</b>
-                  <span class="world-end-kanji">{{ chart.kanji }}</span>
-                  <span class="world-end-stars">★ {{ chart.stars }}</span>
-                </span>
+                  <span
+                    class="world-end-chip"
+                    :title="`WORLD'S END ${chart.kanji} · ${chart.stars} 星`"
+                  >
+                    <b>WORLD'S END</b>
+                    <span class="world-end-kanji">{{ chart.kanji }}</span>
+                    <span class="world-end-stars">★ {{ chart.stars }}</span>
+                  </span>
+                  <small>
+                    {{
+                      formatChartUpdatedAt(
+                        selectedSong.regions[region]?.levelUpdatedAt[
+                          `we:${chart.kanji}|${chart.stars}`
+                        ],
+                      )
+                    }}
+                  </small>
+                </div>
               </div>
             </section>
           </div>
