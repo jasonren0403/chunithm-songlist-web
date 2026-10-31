@@ -18,8 +18,16 @@ import {
 // 三态收录筛选：0 = 不限，1 = 收录，2 = 未收录，点击复选框循环切换
 type RegionState = 0 | 1 | 2
 type Theme = "light" | "dark"
+type SongSort = "default" | "title-asc" | "title-desc" | "recent"
 
 const REGION_STATE_HINTS = ["不限", "收录", "未收录"] as const
+const SONG_SORT_OPTIONS: { value: SongSort; label: string }[] = [
+  { value: "default", label: "默认顺序" },
+  { value: "title-asc", label: "曲名升序" },
+  { value: "title-desc", label: "曲名降序" },
+  { value: "recent", label: "最近收录" },
+]
+const songTitleCollator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" })
 
 const themeStorageKey = "chunithm-song-atlas-theme"
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)")
@@ -46,6 +54,7 @@ const errorMessage = ref("")
 const keyword = ref("")
 const category = ref("")
 const difficulty = ref<DifficultyKey | "">("")
+const songSort = ref<SongSort>("default")
 const emptyRegionStates = (): Record<Region, RegionState> => ({ JPN: 0, EXP: 0, CHN: 0 })
 const regionStates = ref<Record<Region, RegionState>>(emptyRegionStates())
 const currentPage = ref(1)
@@ -73,7 +82,7 @@ watch(
 const filteredSongs = computed(() => {
   const search = keyword.value.trim().toLocaleLowerCase()
 
-  return songs.value.filter((song) => {
+  const matchingSongs = songs.value.filter((song) => {
     const matchesKeyword =
       !search ||
       [song.title, song.reading, song.artist, song.category].some((text) =>
@@ -89,6 +98,23 @@ const filteredSongs = computed(() => {
 
     return matchesKeyword && matchesCategory && matchesDifficulty && matchesRegions
   })
+
+  if (songSort.value === "default") return matchingSongs
+
+  return matchingSongs
+    .map((song, index) => ({ song, index }))
+    .sort((left, right) => {
+      if (songSort.value === "recent") {
+        const latestAddedAt = (song: Song): number =>
+          Math.max(...Object.values(song.regionHistory).map((history) => history?.addedAt ?? 0))
+        return latestAddedAt(right.song) - latestAddedAt(left.song) || left.index - right.index
+      }
+
+      const titleOrder = songTitleCollator.compare(left.song.title, right.song.title)
+      const direction = songSort.value === "title-asc" ? 1 : -1
+      return titleOrder * direction || left.index - right.index
+    })
+    .map(({ song }) => song)
 })
 
 const pageCount = computed(() => Math.ceil(filteredSongs.value.length / pageSize.value))
@@ -97,7 +123,7 @@ const pagedSongs = computed(() => {
   return filteredSongs.value.slice(start, start + pageSize.value)
 })
 
-watch([keyword, category, difficulty, regionStates, pageSize], () => {
+watch([keyword, category, difficulty, regionStates, pageSize, songSort], () => {
   currentPage.value = 1
 })
 
@@ -126,6 +152,7 @@ function clearFilters(): void {
   keyword.value = ""
   category.value = ""
   difficulty.value = ""
+  songSort.value = "default"
   regionStates.value = emptyRegionStates()
 }
 
@@ -381,6 +408,14 @@ onUnmounted(() => {
               :key="item.key"
               :label="item.label"
               :value="item.key"
+            />
+          </el-select>
+          <el-select v-model="songSort" aria-label="曲目排序">
+            <el-option
+              v-for="option in SONG_SORT_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
             />
           </el-select>
           <div class="region-checks" role="group" aria-label="按区服收录状态筛选">

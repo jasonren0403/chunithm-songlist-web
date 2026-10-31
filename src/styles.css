@@ -332,7 +332,7 @@ input {
 
 .filter-panel {
   display: grid;
-  grid-template-columns: repeat(3, minmax(150px, 1fr)) auto;
+  grid-template-columns: repeat(4, minmax(130px, 1fr)) auto;
   gap: 10px;
   padding: 14px;
   border: 1px solid var(--border);
