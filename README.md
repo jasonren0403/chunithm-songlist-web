@@ -44,6 +44,12 @@ PR 的标题与正文会随每次运行刷新（标题形如 `chore(data): sync 
 
 WORLD'S END 谱面会单独显示专用标识、谱面标记和星数；同一首歌在一个区服内有多个 WORLD'S END 谱面时会全部保留。
 
+## 部署到 Vercel
+
+在 Vercel 中导入 GitHub 仓库，保持项目根目录为仓库根目录，生产分支设为 `main`。仓库中的 `vercel.json` 会配置 Vite 构建和 `dist` 输出；连接 GitHub 后，合并到 `main` 会部署生产版本，Pull Request 会生成预览部署。
+
+封面位于单独的私有仓库，需在 GitHub 创建一个 fine-grained personal access token，并仅授予 `jasonren0403/chunithm-songlist-covers` 仓库的 **Contents: Read-only** 权限。将其作为 Vercel 环境变量 `COVERS_READ_TOKEN` 添加到 Production 和 Preview 环境，然后重新部署。Vercel 构建会使用此凭证初始化 `public/images` submodule；令牌不会写入仓库或打印到构建日志。不要复用拥有封面仓写权限的 GitHub Actions `COVERS_TOKEN`。本地构建不需要配置此变量。
+
 ## 构建
 
 ```sh
