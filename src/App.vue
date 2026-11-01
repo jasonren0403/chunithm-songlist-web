@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue"
 import { ElMessage } from "element-plus"
 import zhCn from "element-plus/es/locale/lang/zh-cn"
+import { inject } from "@vercel/analytics"
 import {
   CATALOG_REGIONS,
   DIFFICULTIES,
@@ -323,6 +324,7 @@ function hasNeverBeenInRegion(song: Song, region: Region): boolean {
 onMounted(() => {
   systemThemeQuery.addEventListener("change", handleSystemThemeChange)
   void refreshCatalog()
+  inject()
 })
 
 onUnmounted(() => {
